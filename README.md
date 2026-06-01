@@ -18,9 +18,16 @@ The multiplayer goal is to let you share a puzzle room with friends so you can w
 
 ## Tech stack
 
-- **Frontend:** React + TypeScript
+- **Frontend:** React + TypeScript + Vite
 - **Canvas / interaction:** Konva.js
 - **Multiplayer (planned):** Node.js + Socket.io
+
+## Getting started
+
+```bash
+npm install
+npm run dev
+```
 
 ## Roadmap
 
