@@ -206,7 +206,7 @@ export default function PuzzleBoard({ imageSrc, onReset }: Props) {
           />
         </Layer>
         <Layer>
-          {pieces.map(p => {
+          {pieces.filter(p => p.locked).map(p => {
             const img = pieceImages[p.id]
             if (!img) return null
             return (
@@ -216,7 +216,23 @@ export default function PuzzleBoard({ imageSrc, onReset }: Props) {
                 image={img}
                 x={p.x}
                 y={p.y}
-                draggable={!p.locked}
+                draggable={false}
+              />
+            )
+          })}
+        </Layer>
+        <Layer>
+          {pieces.filter(p => !p.locked).map(p => {
+            const img = pieceImages[p.id]
+            if (!img) return null
+            return (
+              <KonvaImage
+                key={p.id}
+                ref={node => { if (node) nodeRefs.current[p.id] = node }}
+                image={img}
+                x={p.x}
+                y={p.y}
+                draggable
                 onDragStart={e => handleDragStart(p.id, e.target.x(), e.target.y())}
                 onDragMove={e => handleDragMove(p.id, e.target.x(), e.target.y())}
                 onDragEnd={e => handleDragEnd(p.id, e.target.x(), e.target.y())}
