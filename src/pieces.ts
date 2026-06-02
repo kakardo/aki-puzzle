@@ -8,6 +8,7 @@ export interface PieceData {
   correctY: number
   tabs: [number, number, number, number] // top, right, bottom, left: 1=tab, -1=blank
   imageDataUrl: string
+  locked: boolean
 }
 
 const PIECE_SIZE = 120
@@ -134,8 +135,8 @@ export function generatePieces(
       ctx.stroke()
       ctx.restore()
 
-      const correctX = (stageWidth - cols * pw) / 2 + col * pw
-      const correctY = (stageHeight - rows * ph) / 2 + row * ph
+      const correctX = (stageWidth - cols * pw) / 2 + col * pw - padding
+      const correctY = (stageHeight - rows * ph) / 2 + row * ph - padding
 
       // scatter pieces randomly around the stage
       const x = Math.random() * (stageWidth - canvasSize)
@@ -151,6 +152,7 @@ export function generatePieces(
         correctY,
         tabs,
         imageDataUrl: canvas.toDataURL(),
+        locked: false,
       })
     }
   }
