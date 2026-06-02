@@ -21,7 +21,13 @@ export default function PuzzleBoard({ imageSrc, onReset }: Props) {
   const [solved, setSolved] = useState(false)
   const [size, setSize] = useState({ width: window.innerWidth, height: window.innerHeight })
   const stageRef = useRef<KonvaType.Stage>(null)
-  const dragOrigin = useRef<{ x: number; y: number } | null>(null)
+  const nodeRefs = useRef<Record<string, KonvaType.Image>>({})
+  const lastPos = useRef<{ x: number; y: number } | null>(null)
+  const groupsRef = useRef(groups)
+  const piecesRef = useRef(pieces)
+
+  useEffect(() => { groupsRef.current = groups }, [groups])
+  useEffect(() => { piecesRef.current = pieces }, [pieces])
 
   useEffect(() => {
     const img = new window.Image()
@@ -31,7 +37,6 @@ export default function PuzzleBoard({ imageSrc, onReset }: Props) {
       setPieces(generated)
       setGroups({})
       setSolved(false)
-
       const images: Record<string, HTMLImageElement> = {}
       let loaded = 0
       generated.forEach(p => {
@@ -60,31 +65,58 @@ export default function PuzzleBoard({ imageSrc, onReset }: Props) {
     return currentPieces.filter(p => currentGroups[p.id] === groupId).map(p => p.id)
   }
 
+  function correctPos(col: number, row: number) {
+    const originX = (size.width - COLS * PIECE_SIZE) / 2
+    const originY = (size.height - ROWS * PIECE_SIZE) / 2
+    return {
+      cx: originX + col * PIECE_SIZE - PADDING,
+      cy: originY + row * PIECE_SIZE - PADDING,
+    }
+  }
+
   function handleDragStart(id: string, x: number, y: number) {
-    dragOrigin.current = { x, y }
-    // bring group to front
+    lastPos.current = { x, y }
+    // bring group to front in state (z-order)
     setPieces(prev => {
-      const groupIds = getGroupIds(id, groups, prev)
+      const groupIds = getGroupIds(id, groupsRef.current, prev)
       const others = prev.filter(p => !groupIds.includes(p.id))
       const inGroup = prev.filter(p => groupIds.includes(p.id))
       return [...others, ...inGroup]
     })
   }
 
-  function handleDragEnd(id: string, finalX: number, finalY: number) {
-    if (!dragOrigin.current) return
-    const dx = finalX - dragOrigin.current.x
-    const dy = finalY - dragOrigin.current.y
-    dragOrigin.current = null
+  // Move group members imperatively — no React state, no lag
+  function handleDragMove(id: string, x: number, y: number) {
+    if (!lastPos.current) return
+    const dx = x - lastPos.current.x
+    const dy = y - lastPos.current.y
+    lastPos.current = { x, y }
 
+    const groupIds = getGroupIds(id, groupsRef.current, piecesRef.current)
+    groupIds.forEach(gid => {
+      if (gid === id) return
+      const node = nodeRefs.current[gid]
+      if (node) {
+        node.x(node.x() + dx)
+        node.y(node.y() + dy)
+      }
+    })
+  }
+
+  function handleDragEnd(id: string, finalX: number, finalY: number) {
+    lastPos.current = null
+    const currentGroups = groupsRef.current
+
+    // read actual node positions (imperatively updated during drag)
     setPieces(prevPieces => {
-      const currentGroups = groups
       const groupIds = getGroupIds(id, currentGroups, prevPieces)
 
-      // move entire group by the same delta (dragged piece already moved via Konva)
+      // sync all node positions into state
       let next = prevPieces.map(p => {
-        if (p.id === id) return { ...p, x: finalX, y: finalY }
-        if (groupIds.includes(p.id)) return { ...p, x: p.x + dx, y: p.y + dy }
+        const node = nodeRefs.current[p.id]
+        if (node && groupIds.includes(p.id)) {
+          return { ...p, x: node.x(), y: node.y() }
+        }
         return p
       })
 
@@ -92,65 +124,63 @@ export default function PuzzleBoard({ imageSrc, onReset }: Props) {
       let newGroups = { ...currentGroups }
       let snapped = false
 
-      // try to snap to any adjacent piece
+      // snap to direct neighbour
       for (const other of next) {
         if (groupIds.includes(other.id)) continue
+        const colDiff = Math.abs(other.col - dragged.col)
+        const rowDiff = Math.abs(other.row - dragged.row)
+        if (!((colDiff === 1 && rowDiff === 0) || (colDiff === 0 && rowDiff === 1))) continue
+
         const expectedDx = (other.col - dragged.col) * PIECE_SIZE
         const expectedDy = (other.row - dragged.row) * PIECE_SIZE
         const offX = Math.abs((other.x - dragged.x) - expectedDx)
         const offY = Math.abs((other.y - dragged.y) - expectedDy)
 
         if (offX < SNAP_THRESHOLD && offY < SNAP_THRESHOLD) {
-          const snapX = other.x - expectedDx
-          const snapY = other.y - expectedDy
-          const shiftX = snapX - dragged.x
-          const shiftY = snapY - dragged.y
-
+          const shiftX = (other.x - expectedDx) - dragged.x
+          const shiftY = (other.y - expectedDy) - dragged.y
           next = next.map(p =>
             groupIds.includes(p.id) ? { ...p, x: p.x + shiftX, y: p.y + shiftY } : p
           )
-
           const newGroupId = newGroups[other.id] ?? other.id
           groupIds.forEach(pid => { newGroups[pid] = newGroupId })
           newGroups[other.id] = newGroupId
-          const otherGroupIds = getGroupIds(other.id, groups, prevPieces)
-          otherGroupIds.forEach(pid => { newGroups[pid] = newGroupId })
+          getGroupIds(other.id, currentGroups, prevPieces).forEach(pid => { newGroups[pid] = newGroupId })
           snapped = true
           break
         }
       }
 
-      // if not snapped to a piece, check snap to grid
+      // snap to grid — check any piece in the group
       if (!snapped) {
-        const originX = (size.width - COLS * PIECE_SIZE) / 2
-        const originY = (size.height - ROWS * PIECE_SIZE) / 2
-        const draggedUpdated = next.find(p => p.id === id)!
-        const correctX = originX + draggedUpdated.col * PIECE_SIZE - PADDING
-        const correctY = originY + draggedUpdated.row * PIECE_SIZE - PADDING
-        const offX = Math.abs(draggedUpdated.x - correctX)
-        const offY = Math.abs(draggedUpdated.y - correctY)
-
-        if (offX < SNAP_THRESHOLD * 2 && offY < SNAP_THRESHOLD * 2) {
-          const shiftX = correctX - draggedUpdated.x
-          const shiftY = correctY - draggedUpdated.y
-          next = next.map(p =>
-            groupIds.includes(p.id) ? { ...p, x: p.x + shiftX, y: p.y + shiftY } : p
-          )
+        for (const gid of groupIds) {
+          const gp = next.find(p => p.id === gid)!
+          const { cx, cy } = correctPos(gp.col, gp.row)
+          if (Math.abs(gp.x - cx) < SNAP_THRESHOLD * 2 && Math.abs(gp.y - cy) < SNAP_THRESHOLD * 2) {
+            const shiftX = cx - gp.x
+            const shiftY = cy - gp.y
+            next = next.map(p =>
+              groupIds.includes(p.id) ? { ...p, x: p.x + shiftX, y: p.y + shiftY } : p
+            )
+            break
+          }
         }
       }
 
-      setGroups(newGroups)
-
-      // check completion
-      const originX = (size.width - COLS * PIECE_SIZE) / 2
-      const originY = (size.height - ROWS * PIECE_SIZE) / 2
-      const allCorrect = next.every(p => {
-        const cx = originX + p.col * PIECE_SIZE - PADDING
-        const cy = originY + p.row * PIECE_SIZE - PADDING
-        return Math.abs(p.x - cx) < 2 && Math.abs(p.y - cy) < 2
+      // lock pieces in correct position
+      next = next.map(p => {
+        const { cx, cy } = correctPos(p.col, p.row)
+        return Math.abs(p.x - cx) < 2 && Math.abs(p.y - cy) < 2 ? { ...p, locked: true } : p
       })
-      if (allCorrect) setSolved(true)
 
+      // sync final positions back to nodes
+      next.forEach(p => {
+        const node = nodeRefs.current[p.id]
+        if (node) { node.x(p.x); node.y(p.y) }
+      })
+
+      setGroups(newGroups)
+      if (next.every(p => p.locked)) setSolved(true)
       return next
     })
   }
@@ -182,11 +212,13 @@ export default function PuzzleBoard({ imageSrc, onReset }: Props) {
             return (
               <KonvaImage
                 key={p.id}
+                ref={node => { if (node) nodeRefs.current[p.id] = node }}
                 image={img}
                 x={p.x}
                 y={p.y}
-                draggable
+                draggable={!p.locked}
                 onDragStart={e => handleDragStart(p.id, e.target.x(), e.target.y())}
+                onDragMove={e => handleDragMove(p.id, e.target.x(), e.target.y())}
                 onDragEnd={e => handleDragEnd(p.id, e.target.x(), e.target.y())}
               />
             )
