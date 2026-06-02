@@ -64,6 +64,26 @@ function drawPiecePath(
   ctx.closePath()
 }
 
+export function calcPieceSize(
+  image: HTMLImageElement,
+  cols: number,
+  rows: number,
+  stageWidth: number,
+  stageHeight: number
+): { pw: number; ph: number } {
+  const maxW = stageWidth * 0.85
+  const maxH = stageHeight * 0.85
+  const aspect = image.width / image.height
+  // fit puzzle within maxW x maxH while keeping image aspect ratio
+  let pw = maxW / cols
+  let ph = pw / aspect
+  if (ph * rows > maxH) {
+    ph = maxH / rows
+    pw = ph * aspect
+  }
+  return { pw: Math.floor(pw), ph: Math.floor(ph) }
+}
+
 export function generatePieces(
   image: HTMLImageElement,
   cols: number,
@@ -71,8 +91,7 @@ export function generatePieces(
   stageWidth: number,
   stageHeight: number
 ): PieceData[] {
-  const pw = PIECE_SIZE
-  const ph = PIECE_SIZE
+  const { pw, ph } = calcPieceSize(image, cols, rows, stageWidth, stageHeight)
   const padding = TAB_SIZE
 
   // seeded tab layout so adjacent pieces match
@@ -98,9 +117,8 @@ export function generatePieces(
       const tabs: [number, number, number, number] = [top, right, bottom, left]
 
       const canvas = document.createElement('canvas')
-      const canvasSize = pw + padding * 2
-      canvas.width = canvasSize
-      canvas.height = canvasSize
+      canvas.width = pw + padding * 2
+      canvas.height = ph + padding * 2
       const ctx = canvas.getContext('2d')!
 
       ctx.save()
@@ -139,8 +157,8 @@ export function generatePieces(
       const correctY = (stageHeight - rows * ph) / 2 + row * ph - padding
 
       // scatter pieces randomly around the stage
-      const x = Math.random() * (stageWidth - canvasSize)
-      const y = Math.random() * (stageHeight - canvasSize)
+      const x = Math.random() * (stageWidth - pw - padding * 2)
+      const y = Math.random() * (stageHeight - ph - padding * 2)
 
       pieces.push({
         id: `${col}-${row}`,

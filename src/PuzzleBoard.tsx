@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Stage, Layer, Image as KonvaImage, Rect } from 'react-konva'
 import type KonvaType from 'konva'
-import { generatePieces, type PieceData } from './pieces'
+import { generatePieces, calcPieceSize, type PieceData } from './pieces'
 
 interface Props {
   imageSrc: string
@@ -10,7 +10,6 @@ interface Props {
 
 const COLS = 4
 const ROWS = 4
-const PIECE_SIZE = 120
 const PADDING = 20
 const SNAP_THRESHOLD = 30
 
@@ -20,6 +19,7 @@ export default function PuzzleBoard({ imageSrc, onReset }: Props) {
   const [groups, setGroups] = useState<Record<string, string>>({})
   const [solved, setSolved] = useState(false)
   const [size, setSize] = useState({ width: window.innerWidth, height: window.innerHeight })
+  const [pieceSize, setPieceSize] = useState({ pw: 120, ph: 120 })
   const stageRef = useRef<KonvaType.Stage>(null)
   const nodeRefs = useRef<Record<string, KonvaType.Image>>({})
   const lastPos = useRef<{ x: number; y: number } | null>(null)
@@ -33,6 +33,8 @@ export default function PuzzleBoard({ imageSrc, onReset }: Props) {
     const img = new window.Image()
     img.src = imageSrc
     img.onload = () => {
+      const ps = calcPieceSize(img, COLS, ROWS, size.width, size.height)
+      setPieceSize(ps)
       const generated = generatePieces(img, COLS, ROWS, size.width, size.height)
       setPieces(generated)
       setGroups({})
@@ -66,11 +68,12 @@ export default function PuzzleBoard({ imageSrc, onReset }: Props) {
   }
 
   function correctPos(col: number, row: number) {
-    const originX = (size.width - COLS * PIECE_SIZE) / 2
-    const originY = (size.height - ROWS * PIECE_SIZE) / 2
+    const { pw, ph } = pieceSize
+    const originX = (size.width - COLS * pw) / 2
+    const originY = (size.height - ROWS * ph) / 2
     return {
-      cx: originX + col * PIECE_SIZE - PADDING,
-      cy: originY + row * PIECE_SIZE - PADDING,
+      cx: originX + col * pw - PADDING,
+      cy: originY + row * ph - PADDING,
     }
   }
 
@@ -131,8 +134,8 @@ export default function PuzzleBoard({ imageSrc, onReset }: Props) {
         const rowDiff = Math.abs(other.row - dragged.row)
         if (!((colDiff === 1 && rowDiff === 0) || (colDiff === 0 && rowDiff === 1))) continue
 
-        const expectedDx = (other.col - dragged.col) * PIECE_SIZE
-        const expectedDy = (other.row - dragged.row) * PIECE_SIZE
+        const expectedDx = (other.col - dragged.col) * pieceSize.pw
+        const expectedDy = (other.row - dragged.row) * pieceSize.ph
         const offX = Math.abs((other.x - dragged.x) - expectedDx)
         const offY = Math.abs((other.y - dragged.y) - expectedDy)
 
@@ -185,8 +188,8 @@ export default function PuzzleBoard({ imageSrc, onReset }: Props) {
     })
   }
 
-  const originX = (size.width - COLS * PIECE_SIZE) / 2
-  const originY = (size.height - ROWS * PIECE_SIZE) / 2
+  const originX = (size.width - COLS * pieceSize.pw) / 2
+  const originY = (size.height - ROWS * pieceSize.ph) / 2
 
   return (
     <div style={{ position: 'relative', background: '#e8e8e2', width: '100vw', height: '100vh' }}>
@@ -198,8 +201,8 @@ export default function PuzzleBoard({ imageSrc, onReset }: Props) {
           <Rect
             x={originX}
             y={originY}
-            width={COLS * PIECE_SIZE}
-            height={ROWS * PIECE_SIZE}
+            width={COLS * pieceSize.pw}
+            height={ROWS * pieceSize.ph}
             stroke="rgba(0,0,0,0.15)"
             strokeWidth={1}
             fill="rgba(0,0,0,0.02)"
