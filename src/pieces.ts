@@ -99,41 +99,46 @@ export function generatePieces(
   const slotW = pw + padding * 2 + gap
   const slotH = ph + padding * 2 + gap
 
-  // grid dimensions covering the full screen
-  const gridCols = Math.floor(stageWidth / slotW)
-  const gridRows = Math.floor(stageHeight / slotH)
-
-  // offset to centre the grid on screen
-  const gridOffsetX = Math.round((stageWidth - gridCols * slotW) / 2)
-  const gridOffsetY = Math.round((stageHeight - gridRows * slotH) / 2)
-
-  // puzzle occupies the central cells — find which grid cells it covers
   const originX = Math.round((stageWidth - cols * pw) / 2)
   const originY = Math.round((stageHeight - rows * ph) / 2)
   const puzzleRight = originX + cols * pw
   const puzzleBottom = originY + rows * ph
 
+  // equal pixel margin between puzzle frame and nearest pieces on all 4 sides
+  const margin = 32
+
+  // four strips around the puzzle — top, bottom, left, right
+  const strips = [
+    { x0: 0,               y0: 0,                     x1: stageWidth,        y1: originY - margin },
+    { x0: 0,               y0: puzzleBottom + margin,  x1: stageWidth,        y1: stageHeight },
+    { x0: 0,               y0: originY - margin,       x1: originX - margin,  y1: puzzleBottom + margin },
+    { x0: puzzleRight + margin, y0: originY - margin,  x1: stageWidth,        y1: puzzleBottom + margin },
+  ]
+
   const slots: { x: number; y: number; dist: number }[] = []
 
-  for (let r = 0; r < gridRows; r++) {
-    for (let c = 0; c < gridCols; c++) {
-      const x = gridOffsetX + c * slotW
-      const y = gridOffsetY + r * slotH
-      // skip if this slot overlaps (or touches) the puzzle area
-      const overlaps = x < puzzleRight && x + slotW > originX &&
-                       y < puzzleBottom && y + slotH > originY
-      if (overlaps) continue
-
-      // distance from slot centre to nearest point on puzzle rectangle
-      const sx = x + slotW / 2
-      const sy = y + slotH / 2
-      const dx = Math.max(0, Math.max(originX - sx, sx - puzzleRight))
-      const dy = Math.max(0, Math.max(originY - sy, sy - puzzleBottom))
-      slots.push({ x, y, dist: Math.sqrt(dx * dx + dy * dy) })
+  for (const strip of strips) {
+    const stripW = strip.x1 - strip.x0
+    const stripH = strip.y1 - strip.y0
+    if (stripW < slotW || stripH < slotH) continue
+    const nCols = Math.floor(stripW / slotW)
+    const nRows = Math.floor(stripH / slotH)
+    const offX = strip.x0 + (stripW - nCols * slotW) / 2
+    const offY = strip.y0 + (stripH - nRows * slotH) / 2
+    for (let r = 0; r < nRows; r++) {
+      for (let c = 0; c < nCols; c++) {
+        const x = offX + c * slotW
+        const y = offY + r * slotH
+        const sx = x + slotW / 2
+        const sy = y + slotH / 2
+        const dx = Math.max(0, Math.max(originX - sx, sx - puzzleRight))
+        const dy = Math.max(0, Math.max(originY - sy, sy - puzzleBottom))
+        slots.push({ x, y, dist: Math.sqrt(dx * dx + dy * dy) })
+      }
     }
   }
 
-  // sort closest to puzzle first, shuffle within equal-distance tiers
+  // sort closest to puzzle first
   slots.sort((a, b) => a.dist - b.dist)
 
   let slotIndex = 0
