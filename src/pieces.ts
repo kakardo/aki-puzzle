@@ -8,6 +8,8 @@ export interface PieceData {
   correctY: number
   tabs: [number, number, number, number] // top, right, bottom, left: 1=tab, -1=blank
   imageDataUrl: string
+  displayW: number
+  displayH: number
   locked: boolean
 }
 
@@ -71,18 +73,21 @@ export function calcPieceSize(
   stageHeight: number
 ): { pw: number; ph: number; padding: number } {
   const aspect = image.width / image.height
-  // puzzle occupies 55% of each screen dimension — equal margins on all sides
-  const fraction = 0.50
-  let pw = (stageWidth * fraction) / cols
-  let ph = pw / aspect
-  if (ph * rows > stageHeight * fraction) {
-    ph = (stageHeight * fraction) / rows
-    pw = ph * aspect
+  const fraction = 0.40
+
+  // size the frame to match the image aspect ratio, fitting within the screen fraction
+  let frameW = stageWidth * fraction
+  let frameH = frameW / aspect
+  if (frameH > stageHeight * fraction) {
+    frameH = stageHeight * fraction
+    frameW = frameH * aspect
   }
-  const pwf = Math.floor(pw)
-  const phf = Math.floor(ph)
-  const padding = Math.max(6, Math.round(Math.min(pwf, phf) * 0.18))
-  return { pw: pwf, ph: phf, padding }
+
+  // piece dimensions come from dividing the frame — this preserves the image ratio
+  const pw = Math.floor(frameW / cols)
+  const ph = Math.floor(frameH / rows)
+  const padding = Math.max(8, Math.round(Math.min(pw, ph) * 0.22))
+  return { pw, ph, padding }
 }
 
 export function generatePieces(
@@ -90,7 +95,8 @@ export function generatePieces(
   cols: number,
   rows: number,
   stageWidth: number,
-  stageHeight: number
+  stageHeight: number,
+  resolution = 2
 ): PieceData[] {
   const { pw, ph, padding } = calcPieceSize(image, cols, rows, stageWidth, stageHeight)
   const tabSize = padding
@@ -165,10 +171,15 @@ export function generatePieces(
       const left = col === 0 ? 0 : -tabGrid[row][col][1]
       const tabs: [number, number, number, number] = [top, right, bottom, left]
 
+      const naturalRes = Math.min(image.width / (cols * pw), image.height / (rows * ph))
+      const RES = Math.max(1, Math.min(resolution, naturalRes))
+      const logicalW = pw + padding * 2
+      const logicalH = ph + padding * 2
       const canvas = document.createElement('canvas')
-      canvas.width = pw + padding * 2
-      canvas.height = ph + padding * 2
+      canvas.width = logicalW * RES
+      canvas.height = logicalH * RES
       const ctx = canvas.getContext('2d')!
+      ctx.scale(RES, RES)
 
       ctx.save()
       ctx.translate(padding, padding)
@@ -226,6 +237,8 @@ export function generatePieces(
         correctY,
         tabs,
         imageDataUrl: canvas.toDataURL(),
+        displayW: logicalW,
+        displayH: logicalH,
         locked: false,
       })
     }

@@ -1,29 +1,42 @@
 import { useEffect, useRef, useState } from 'react'
 import { Stage, Layer, Image as KonvaImage, Rect } from 'react-konva'
 import type KonvaType from 'konva'
+import type { KonvaEventObject } from 'konva/lib/Node'
 import { generatePieces, calcPieceSize, type PieceData } from './pieces'
 
 interface Props {
   imageSrc: string
   cols: number
   rows: number
+  zoomStep: number
+  resolution: number
   onReset: () => void
+  onOpenSettings: () => void
 }
 
 const SNAP_THRESHOLD = 30
 
-export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, onReset }: Props) {
+export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep, resolution, onReset, onOpenSettings }: Props) {
   const [pieces, setPieces] = useState<PieceData[]>([])
   const [pieceImages, setPieceImages] = useState<Record<string, HTMLImageElement>>({})
   const [groups, setGroups] = useState<Record<string, string>>({})
   const [solved, setSolved] = useState(false)
   const [size, setSize] = useState({ width: window.innerWidth, height: window.innerHeight })
   const [pieceSize, setPieceSize] = useState({ pw: 120, ph: 120, padding: 20 })
+  const [zoom, setZoom] = useState(1)
+  const [pan, setPan] = useState({ x: 0, y: 0 })
   const stageRef = useRef<KonvaType.Stage>(null)
   const nodeRefs = useRef<Record<string, KonvaType.Image>>({})
   const lastPos = useRef<{ x: number; y: number } | null>(null)
+  const isPanning = useRef(false)
+  const panAnchor = useRef({ x: 0, y: 0 })
   const groupsRef = useRef(groups)
   const piecesRef = useRef(pieces)
+
+  const zoomRef = useRef(zoom)
+  const panRef = useRef(pan)
+  useEffect(() => { zoomRef.current = zoom }, [zoom])
+  useEffect(() => { panRef.current = pan }, [pan])
 
   useEffect(() => { groupsRef.current = groups }, [groups])
   useEffect(() => { piecesRef.current = pieces }, [pieces])
@@ -34,7 +47,7 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, onReset 
     img.onload = () => {
       const ps = calcPieceSize(img, COLS, ROWS, size.width, size.height)
       setPieceSize(ps)
-      const generated = generatePieces(img, COLS, ROWS, size.width, size.height)
+      const generated = generatePieces(img, COLS, ROWS, size.width, size.height, resolution)
       setPieces(generated)
       setGroups({})
       setSolved(false)
@@ -58,6 +71,35 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, onReset 
     }
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
+  useEffect(() => {
+    function handleKey(e: KeyboardEvent) {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      const key = e.key.toLowerCase()
+      if (key === 'e') {
+        const newZoom = Math.min(zoomRef.current * zoomStep, 8)
+        const cx = window.innerWidth / 2
+        const cy = window.innerHeight / 2
+        const mouseX = (cx - panRef.current.x) / zoomRef.current
+        const mouseY = (cy - panRef.current.y) / zoomRef.current
+        setZoom(newZoom)
+        setPan({ x: cx - mouseX * newZoom, y: cy - mouseY * newZoom })
+      } else if (key === 'q') {
+        const newZoom = Math.max(zoomRef.current / zoomStep, 0.25)
+        const cx = window.innerWidth / 2
+        const cy = window.innerHeight / 2
+        const mouseX = (cx - panRef.current.x) / zoomRef.current
+        const mouseY = (cy - panRef.current.y) / zoomRef.current
+        setZoom(newZoom)
+        setPan({ x: cx - mouseX * newZoom, y: cy - mouseY * newZoom })
+      } else if (key === 'r') {
+        setZoom(1)
+        setPan({ x: 0, y: 0 })
+      }
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
   }, [])
 
   function getGroupIds(id: string, currentGroups: Record<string, string>, currentPieces: PieceData[]) {
@@ -190,12 +232,77 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, onReset 
   const originX = (size.width - COLS * pieceSize.pw) / 2
   const originY = (size.height - ROWS * pieceSize.ph) / 2
 
+  function handleWheel(e: KonvaEventObject<WheelEvent>) {
+    e.evt.preventDefault()
+    const stage = stageRef.current
+    if (!stage) return
+    const pointer = stage.getPointerPosition()
+    if (!pointer) return
+    const factor = e.evt.deltaY < 0 ? zoomStep : 1 / zoomStep
+    const newZoom = Math.min(Math.max(zoomRef.current * factor, 0.25), 8)
+    const mouseX = (pointer.x - panRef.current.x) / zoomRef.current
+    const mouseY = (pointer.y - panRef.current.y) / zoomRef.current
+    const newPan = { x: pointer.x - mouseX * newZoom, y: pointer.y - mouseY * newZoom }
+    setZoom(newZoom)
+    setPan(newPan)
+    zoomRef.current = newZoom
+    panRef.current = newPan
+  }
+
+  function handleStageMouseDown(e: KonvaEventObject<MouseEvent>) {
+    if (e.target !== stageRef.current) return
+    isPanning.current = true
+    panAnchor.current = {
+      x: e.evt.clientX - panRef.current.x,
+      y: e.evt.clientY - panRef.current.y,
+    }
+  }
+
+  function handleStageMouseMove(e: KonvaEventObject<MouseEvent>) {
+    if (!isPanning.current) return
+    const newPan = {
+      x: e.evt.clientX - panAnchor.current.x,
+      y: e.evt.clientY - panAnchor.current.y,
+    }
+    setPan(newPan)
+    panRef.current = newPan
+  }
+
+  function handleStageMouseUp() {
+    isPanning.current = false
+  }
+
   return (
     <div style={{ position: 'relative', background: '#e8e8e2', width: '100vw', height: '100vh' }}>
-      <button className="reset-btn" onClick={onReset}>New puzzle</button>
+      <div className="toolbar">
+        <button className="reset-btn" onClick={onReset}>New puzzle</button>
+        <button className="reset-btn" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }) }}>Reset zoom</button>
+        <button className="reset-btn" onClick={onOpenSettings}>Settings</button>
+        <div className="hotkey-menu">
+          <span><kbd>Q</kbd> Zoom out</span>
+          <span><kbd>E</kbd> Zoom in</span>
+          <span><kbd>R</kbd> Reset zoom</span>
+          <span><kbd>Scroll</kbd> Zoom to cursor</span>
+          <span><kbd>Drag</kbd> Pan</span>
+        </div>
+      </div>
       {solved && <div className="solved-banner">Puzzle complete!</div>}
 
-      <Stage ref={stageRef} width={size.width} height={size.height}>
+      <Stage
+        ref={stageRef}
+        width={size.width}
+        height={size.height}
+        scaleX={zoom}
+        scaleY={zoom}
+        x={pan.x}
+        y={pan.y}
+        onWheel={handleWheel}
+        onMouseDown={handleStageMouseDown}
+        onMouseMove={handleStageMouseMove}
+        onMouseUp={handleStageMouseUp}
+        onMouseLeave={handleStageMouseUp}
+        style={{ cursor: isPanning.current ? 'grabbing' : 'default' }}
+      >
         <Layer>
           <Rect
             x={originX}
@@ -218,6 +325,8 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, onReset 
                 image={img}
                 x={p.x}
                 y={p.y}
+                width={p.displayW}
+                height={p.displayH}
                 draggable={false}
               />
             )
@@ -234,6 +343,8 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, onReset 
                 image={img}
                 x={p.x}
                 y={p.y}
+                width={p.displayW}
+                height={p.displayH}
                 draggable
                 onDragStart={e => handleDragStart(p.id, e.target.x(), e.target.y())}
                 onDragMove={e => handleDragMove(p.id, e.target.x(), e.target.y())}
