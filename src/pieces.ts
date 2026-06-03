@@ -12,15 +12,14 @@ export interface PieceData {
 }
 
 const PIECE_SIZE = 120
-const TAB_SIZE = 20
 
 function drawPiecePath(
   ctx: CanvasRenderingContext2D,
   tabs: [number, number, number, number],
   w: number,
-  h: number
+  h: number,
+  t: number
 ) {
-  const t = TAB_SIZE
   const [top, right, bottom, left] = tabs
 
   ctx.beginPath()
@@ -70,7 +69,7 @@ export function calcPieceSize(
   rows: number,
   stageWidth: number,
   stageHeight: number
-): { pw: number; ph: number } {
+): { pw: number; ph: number; padding: number } {
   const maxW = stageWidth * 0.85
   const maxH = stageHeight * 0.85
   const aspect = image.width / image.height
@@ -81,7 +80,10 @@ export function calcPieceSize(
     ph = maxH / rows
     pw = ph * aspect
   }
-  return { pw: Math.floor(pw), ph: Math.floor(ph) }
+  const pwf = Math.floor(pw)
+  const phf = Math.floor(ph)
+  const padding = Math.max(6, Math.round(Math.min(pwf, phf) * 0.18))
+  return { pw: pwf, ph: phf, padding }
 }
 
 export function generatePieces(
@@ -91,8 +93,8 @@ export function generatePieces(
   stageWidth: number,
   stageHeight: number
 ): PieceData[] {
-  const { pw, ph } = calcPieceSize(image, cols, rows, stageWidth, stageHeight)
-  const padding = TAB_SIZE
+  const { pw, ph, padding } = calcPieceSize(image, cols, rows, stageWidth, stageHeight)
+  const tabSize = padding
 
   // seeded tab layout so adjacent pieces match
   const tabGrid: number[][][] = []
@@ -123,7 +125,7 @@ export function generatePieces(
 
       ctx.save()
       ctx.translate(padding, padding)
-      drawPiecePath(ctx, tabs, pw, ph)
+      drawPiecePath(ctx, tabs, pw, ph, tabSize)
       ctx.clip()
 
       const sx = (col * image.width) / cols
@@ -147,7 +149,7 @@ export function generatePieces(
       // stroke the piece outline
       ctx.save()
       ctx.translate(padding, padding)
-      drawPiecePath(ctx, tabs, pw, ph)
+      drawPiecePath(ctx, tabs, pw, ph, tabSize)
       ctx.strokeStyle = 'rgba(0,0,0,0.3)'
       ctx.lineWidth = 1
       ctx.stroke()

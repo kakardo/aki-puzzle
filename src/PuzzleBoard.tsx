@@ -5,21 +5,20 @@ import { generatePieces, calcPieceSize, type PieceData } from './pieces'
 
 interface Props {
   imageSrc: string
+  cols: number
+  rows: number
   onReset: () => void
 }
 
-const COLS = 4
-const ROWS = 4
-const PADDING = 20
 const SNAP_THRESHOLD = 30
 
-export default function PuzzleBoard({ imageSrc, onReset }: Props) {
+export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, onReset }: Props) {
   const [pieces, setPieces] = useState<PieceData[]>([])
   const [pieceImages, setPieceImages] = useState<Record<string, HTMLImageElement>>({})
   const [groups, setGroups] = useState<Record<string, string>>({})
   const [solved, setSolved] = useState(false)
   const [size, setSize] = useState({ width: window.innerWidth, height: window.innerHeight })
-  const [pieceSize, setPieceSize] = useState({ pw: 120, ph: 120 })
+  const [pieceSize, setPieceSize] = useState({ pw: 120, ph: 120, padding: 20 })
   const stageRef = useRef<KonvaType.Stage>(null)
   const nodeRefs = useRef<Record<string, KonvaType.Image>>({})
   const lastPos = useRef<{ x: number; y: number } | null>(null)
@@ -72,8 +71,8 @@ export default function PuzzleBoard({ imageSrc, onReset }: Props) {
     const originX = (size.width - COLS * pw) / 2
     const originY = (size.height - ROWS * ph) / 2
     return {
-      cx: originX + col * pw - PADDING,
-      cy: originY + row * ph - PADDING,
+      cx: originX + col * pw - pieceSize.padding,
+      cy: originY + row * ph - pieceSize.padding,
     }
   }
 

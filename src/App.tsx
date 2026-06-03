@@ -2,19 +2,74 @@ import { useState } from 'react'
 import PuzzleBoard from './PuzzleBoard'
 import './App.css'
 
-function App() {
+type Step = 'upload' | 'configure'
+
+function calcGrid(count: number, aspect: number): { cols: number; rows: number } {
+  const cols = Math.max(2, Math.round(Math.sqrt(count * aspect)))
+  const rows = Math.max(2, Math.round(count / cols))
+  return { cols, rows }
+}
+
+export default function App() {
+  const [step, setStep] = useState<Step>('upload')
   const [imageSrc, setImageSrc] = useState<string | null>(null)
+  const [imageAspect, setImageAspect] = useState(1)
+  const [input, setInput] = useState('50')
+  const [grid, setGrid] = useState<{ cols: number; rows: number } | null>(null)
+
+  const pieceCount = Math.max(4, parseInt(input) || 4)
+  const preview = calcGrid(pieceCount, imageAspect)
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
     const reader = new FileReader()
-    reader.onload = () => setImageSrc(reader.result as string)
+    reader.onload = () => {
+      const src = reader.result as string
+      const img = new Image()
+      img.onload = () => {
+        setImageSrc(src)
+        setImageAspect(img.width / img.height)
+        setStep('configure')
+      }
+      img.src = src
+    }
     reader.readAsDataURL(file)
   }
 
-  if (imageSrc) {
-    return <PuzzleBoard imageSrc={imageSrc} onReset={() => setImageSrc(null)} />
+  if (grid && imageSrc) {
+    return (
+      <PuzzleBoard
+        imageSrc={imageSrc}
+        cols={grid.cols}
+        rows={grid.rows}
+        onReset={() => { setGrid(null); setStep('upload') }}
+      />
+    )
+  }
+
+  if (step === 'configure' && imageSrc) {
+    return (
+      <div className="upload-screen">
+        <h1>ZenPiece</h1>
+        <p>How many pieces?</p>
+        <input
+          className="piece-input"
+          type="number"
+          min={4}
+          max={500}
+          value={input}
+          onChange={e => setInput(e.target.value)}
+        />
+        <p className="piece-hint">
+          {preview.cols} × {preview.rows} = {preview.cols * preview.rows} pieces
+        </p>
+        <button className="upload-btn" onClick={() => setGrid(calcGrid(pieceCount, imageAspect))}>
+          Start
+        </button>
+        <button className="text-btn" onClick={() => setStep('upload')}>Change image</button>
+      </div>
+    )
   }
 
   return (
@@ -28,5 +83,3 @@ function App() {
     </div>
   )
 }
-
-export default App
