@@ -70,14 +70,13 @@ export function calcPieceSize(
   stageWidth: number,
   stageHeight: number
 ): { pw: number; ph: number; padding: number } {
-  const maxW = stageWidth * 0.85
-  const maxH = stageHeight * 0.85
   const aspect = image.width / image.height
-  // fit puzzle within maxW x maxH while keeping image aspect ratio
-  let pw = maxW / cols
+  // puzzle occupies 55% of each screen dimension — equal margins on all sides
+  const fraction = 0.50
+  let pw = (stageWidth * fraction) / cols
   let ph = pw / aspect
-  if (ph * rows > maxH) {
-    ph = maxH / rows
+  if (ph * rows > stageHeight * fraction) {
+    ph = (stageHeight * fraction) / rows
     pw = ph * aspect
   }
   const pwf = Math.floor(pw)
@@ -95,6 +94,49 @@ export function generatePieces(
 ): PieceData[] {
   const { pw, ph, padding } = calcPieceSize(image, cols, rows, stageWidth, stageHeight)
   const tabSize = padding
+
+  const gap = 8
+  const slotW = pw + padding * 2 + gap
+  const slotH = ph + padding * 2 + gap
+
+  // grid dimensions covering the full screen
+  const gridCols = Math.floor(stageWidth / slotW)
+  const gridRows = Math.floor(stageHeight / slotH)
+
+  // offset to centre the grid on screen
+  const gridOffsetX = Math.round((stageWidth - gridCols * slotW) / 2)
+  const gridOffsetY = Math.round((stageHeight - gridRows * slotH) / 2)
+
+  // puzzle occupies the central cells — find which grid cells it covers
+  const originX = Math.round((stageWidth - cols * pw) / 2)
+  const originY = Math.round((stageHeight - rows * ph) / 2)
+  const puzzleRight = originX + cols * pw
+  const puzzleBottom = originY + rows * ph
+
+  const slots: { x: number; y: number; dist: number }[] = []
+
+  for (let r = 0; r < gridRows; r++) {
+    for (let c = 0; c < gridCols; c++) {
+      const x = gridOffsetX + c * slotW
+      const y = gridOffsetY + r * slotH
+      // skip if this slot overlaps (or touches) the puzzle area
+      const overlaps = x < puzzleRight && x + slotW > originX &&
+                       y < puzzleBottom && y + slotH > originY
+      if (overlaps) continue
+
+      // distance from slot centre to nearest point on puzzle rectangle
+      const sx = x + slotW / 2
+      const sy = y + slotH / 2
+      const dx = Math.max(0, Math.max(originX - sx, sx - puzzleRight))
+      const dy = Math.max(0, Math.max(originY - sy, sy - puzzleBottom))
+      slots.push({ x, y, dist: Math.sqrt(dx * dx + dy * dy) })
+    }
+  }
+
+  // sort closest to puzzle first, shuffle within equal-distance tiers
+  slots.sort((a, b) => a.dist - b.dist)
+
+  let slotIndex = 0
 
   // seeded tab layout so adjacent pieces match
   const tabGrid: number[][][] = []
@@ -158,9 +200,16 @@ export function generatePieces(
       const correctX = (stageWidth - cols * pw) / 2 + col * pw - padding
       const correctY = (stageHeight - rows * ph) / 2 + row * ph - padding
 
-      // scatter pieces randomly around the stage
-      const x = Math.random() * (stageWidth - pw - padding * 2)
-      const y = Math.random() * (stageHeight - ph - padding * 2)
+      // place in a margin slot, fall back to random if slots exhausted
+      let x: number, y: number
+      if (slotIndex < slots.length) {
+        x = slots[slotIndex].x
+        y = slots[slotIndex].y
+        slotIndex++
+      } else {
+        x = Math.random() * (stageWidth - pw - padding * 2)
+        y = Math.random() * (stageHeight - ph - padding * 2)
+      }
 
       pieces.push({
         id: `${col}-${row}`,
