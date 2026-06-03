@@ -10,13 +10,14 @@ interface Props {
   rows: number
   zoomStep: number
   resolution: number
+  panStep: number
   onReset: () => void
   onOpenSettings: () => void
 }
 
 const SNAP_THRESHOLD = 30
 
-export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep, resolution, onReset, onOpenSettings }: Props) {
+export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep, resolution, panStep, onReset, onOpenSettings }: Props) {
   const [pieces, setPieces] = useState<PieceData[]>([])
   const [pieceImages, setPieceImages] = useState<Record<string, HTMLImageElement>>({})
   const [groups, setGroups] = useState<Record<string, string>>({})
@@ -96,6 +97,16 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
       } else if (key === 'r') {
         setZoom(1)
         setPan({ x: 0, y: 0 })
+      } else if (['w', 'a', 's', 'd'].includes(key)) {
+        const delta = {
+          w: { x: 0, y: panStep },
+          s: { x: 0, y: -panStep },
+          a: { x: panStep, y: 0 },
+          d: { x: -panStep, y: 0 },
+        }[key]!
+        const newPan = { x: panRef.current.x + delta.x, y: panRef.current.y + delta.y }
+        setPan(newPan)
+        panRef.current = newPan
       }
     }
     window.addEventListener('keydown', handleKey)
@@ -250,7 +261,8 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
   }
 
   function handleStageMouseDown(e: KonvaEventObject<MouseEvent>) {
-    if (e.target !== stageRef.current) return
+    const isPiece = Object.values(nodeRefs.current).includes(e.target as KonvaType.Image)
+    if (isPiece) return
     isPanning.current = true
     panAnchor.current = {
       x: e.evt.clientX - panRef.current.x,
@@ -283,6 +295,7 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
           <span><kbd>E</kbd> Zoom in</span>
           <span><kbd>R</kbd> Reset zoom</span>
           <span><kbd>Scroll</kbd> Zoom to cursor</span>
+          <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Pan</span>
           <span><kbd>Drag</kbd> Pan</span>
         </div>
       </div>

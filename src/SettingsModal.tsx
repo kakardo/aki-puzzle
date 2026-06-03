@@ -3,6 +3,7 @@ import './SettingsModal.css'
 export interface Settings {
   zoomStep: number
   resolution: number
+  panStep: number
 }
 
 const ZOOM_MIN = 1.05
@@ -44,8 +45,12 @@ function Stepper({
   )
 }
 
+const PAN_MIN = 20
+const PAN_MAX = 300
+const PAN_INC = 20
+
 export default function SettingsModal({ settings, onChange, onClose }: Props) {
-  const { zoomStep, resolution } = settings
+  const { zoomStep, resolution, panStep } = settings
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -80,6 +85,15 @@ export default function SettingsModal({ settings, onChange, onClose }: Props) {
           )
         })()}
         <p className="setting-hint">Auto matches the image's native pixel density. Applies on next puzzle.</p>
+
+        <Stepper
+          label="WASD distance"
+          display={`${panStep}px`}
+          onDecrement={() => onChange({ ...settings, panStep: Math.max(PAN_MIN, panStep - PAN_INC) })}
+          onIncrement={() => onChange({ ...settings, panStep: Math.min(PAN_MAX, panStep + PAN_INC) })}
+          decrementDisabled={panStep <= PAN_MIN}
+          incrementDisabled={panStep >= PAN_MAX}
+        />
       </div>
     </div>
   )

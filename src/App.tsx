@@ -11,7 +11,7 @@ function calcGrid(count: number, aspect: number): { cols: number; rows: number }
   return { cols, rows }
 }
 
-const DEFAULT_SETTINGS: Settings = { zoomStep: 1.25, resolution: 99 }
+const DEFAULT_SETTINGS: Settings = { zoomStep: 1.25, resolution: 99, panStep: 80 }
 
 export default function App() {
   const [step, setStep] = useState<Step>('upload')
@@ -51,6 +51,7 @@ export default function App() {
           rows={grid.rows}
           zoomStep={settings.zoomStep}
           resolution={settings.resolution}
+          panStep={settings.panStep}
           onReset={() => { setGrid(null); setStep('upload') }}
           onOpenSettings={() => setShowSettings(true)}
         />
