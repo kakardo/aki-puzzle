@@ -3,8 +3,6 @@ import PuzzleBoard from './PuzzleBoard'
 import SettingsModal, { type Settings } from './SettingsModal'
 import './App.css'
 
-type Step = 'upload' | 'configure'
-
 function calcGrid(count: number, aspect: number): { cols: number; rows: number } {
   const cols = Math.max(2, Math.round(Math.sqrt(count * aspect)))
   const rows = Math.max(2, Math.round(count / cols))
@@ -12,18 +10,21 @@ function calcGrid(count: number, aspect: number): { cols: number; rows: number }
 }
 
 const DEFAULT_SETTINGS: Settings = { zoomStep: 1.25, resolution: 99, panStep: 80 }
+const QUICK_COUNTS = [75, 150, 300, 400, 500, 1000]
 
 export default function App() {
-  const [step, setStep] = useState<Step>('upload')
   const [imageSrc, setImageSrc] = useState<string | null>(null)
   const [imageAspect, setImageAspect] = useState(1)
-  const [input, setInput] = useState('50')
+  const [input, setInput] = useState('300')
   const [grid, setGrid] = useState<{ cols: number; rows: number } | null>(null)
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
   const [showSettings, setShowSettings] = useState(false)
 
-  const pieceCount = Math.max(4, parseInt(input) || 4)
-  const preview = calcGrid(pieceCount, imageAspect)
+  const pieceCount = parseInt(input)
+  const validCount = !isNaN(pieceCount) && pieceCount >= 2 && pieceCount <= 10000
+  const canStart = imageSrc !== null && validCount
+  const preview = validCount ? calcGrid(pieceCount, imageAspect) : null
+  const isCustomCount = validCount && !QUICK_COUNTS.includes(pieceCount)
 
   function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -35,11 +36,15 @@ export default function App() {
       img.onload = () => {
         setImageSrc(src)
         setImageAspect(img.width / img.height)
-        setStep('configure')
       }
       img.src = src
     }
     reader.readAsDataURL(file)
+  }
+
+  function handleStart() {
+    if (!canStart) return
+    setGrid(calcGrid(pieceCount, imageAspect))
   }
 
   if (grid && imageSrc) {
@@ -52,7 +57,7 @@ export default function App() {
           zoomStep={settings.zoomStep}
           resolution={settings.resolution}
           panStep={settings.panStep}
-          onReset={() => { setGrid(null); setStep('upload') }}
+          onReset={() => setGrid(null)}
           onOpenSettings={() => setShowSettings(true)}
         />
         {showSettings && (
@@ -66,47 +71,64 @@ export default function App() {
     )
   }
 
-  if (step === 'configure' && imageSrc) {
-    return (
-      <div className="upload-screen">
-        <h1>ZenPiece</h1>
-        <p>How many pieces?</p>
-        <input
-          className="piece-input"
-          type="number"
-          min={4}
-          max={500}
-          value={input}
-          onChange={e => setInput(e.target.value)}
-        />
-        <p className="piece-hint">
-          {preview.cols} × {preview.rows} = {preview.cols * preview.rows} pieces
-        </p>
-        <button className="settings-inline-btn" onClick={() => setShowSettings(true)}>Settings</button>
-        <button className="upload-btn" onClick={() => setGrid(calcGrid(pieceCount, imageAspect))}>
-          Start
-        </button>
-        <button className="text-btn" onClick={() => setStep('upload')}>Change image</button>
-        {showSettings && (
-          <SettingsModal
-            settings={settings}
-            onChange={setSettings}
-            onClose={() => setShowSettings(false)}
-          />
+  return (
+    <div className="start-screen">
+      <h1>ZenPiece</h1>
+
+      <div className="start-section">
+        {imageSrc ? (
+          <div className="image-chosen">
+            <img className="thumbnail" src={imageSrc} alt="Chosen" />
+            <label className="change-btn">
+              Change image
+              <input type="file" accept="image/*" onChange={handleFile} hidden />
+            </label>
+          </div>
+        ) : (
+          <label className="primary-btn">
+            Choose picture
+            <input type="file" accept="image/*" onChange={handleFile} hidden />
+          </label>
         )}
       </div>
-    )
-  }
 
-  return (
-    <div className="upload-screen">
-      <h1>ZenPiece</h1>
-      <p>Upload an image to start your puzzle</p>
-      <label className="upload-btn">
-        Choose image
-        <input type="file" accept="image/*" onChange={handleFile} hidden />
-      </label>
-      <button className="settings-inline-btn" onClick={() => setShowSettings(true)}>Settings</button>
+      <div className="start-section">
+        <div className="piece-count-row">
+          <input
+            className={`piece-input${isCustomCount ? ' piece-input--custom' : ''}`}
+            type="number"
+            min={2}
+            max={10000}
+            value={input}
+            onChange={e => setInput(e.target.value)}
+          />
+          <label className="section-label">Pieces</label>
+        </div>
+        {preview ? (
+          <p className="piece-hint">{preview.cols} wide × {preview.rows} tall = {preview.cols * preview.rows} pieces</p>
+        ) : (
+          <p className="piece-hint piece-hint--error">Enter a number between 2 and 10 000</p>
+        )}
+        <div className="quick-counts">
+          {QUICK_COUNTS.map(n => (
+            <button
+              key={n}
+              className={`quick-btn${parseInt(input) === n ? ' active' : ''}`}
+              onClick={() => setInput(String(n))}
+            >
+              {n}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="start-section start-actions">
+        <button className="settings-inline-btn" onClick={() => setShowSettings(true)}>Settings</button>
+        <button className="primary-btn" disabled={!canStart} onClick={handleStart}>
+          Start puzzling
+        </button>
+      </div>
+
       {showSettings && (
         <SettingsModal
           settings={settings}
