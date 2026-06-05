@@ -29,6 +29,8 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [loadingSteps, setLoadingSteps] = useState<{ label: string; done: boolean; detail?: string }[]>([])
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [confirmLeave, setConfirmLeave] = useState(false)
   const stageRef = useRef<KonvaType.Stage>(null)
   const nodeRefs = useRef<Record<string, KonvaType.Image>>({})
   const lastPos = useRef<{ x: number; y: number } | null>(null)
@@ -364,7 +366,7 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
   }
 
   return (
-    <div style={{ position: 'relative', background: theme === 'dark' ? '#18181b' : '#e8e8e2', width: '100vw', height: '100vh' }}>
+    <div className="puzzle-canvas" style={{ background: theme === 'dark' ? '#18181b' : '#e8e8e2' }}>
       {loadingSteps.length > 0 && (
         <div className="loading-overlay">
           <div className="loading-box">
@@ -377,11 +379,43 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
           </div>
         </div>
       )}
-      <div className="toolbar">
-        <button className="top-settings-btn" onClick={onReset}>New puzzle</button>
-        <button className="top-settings-btn" onClick={resetToInitialFit}>Reset zoom</button>
+      {/* Upper left: menu button + dropdown */}
+      <div className="puzzle-menu-wrap">
+        <button className="puzzle-menu-btn" onClick={() => setMenuOpen(o => !o)}>
+          <span className="hamburger-line" />
+          <span className="hamburger-line" />
+          <span className="hamburger-line" />
+        </button>
+
+        {menuOpen && (
+          <>
+            <div className="puzzle-menu-backdrop" onClick={() => setMenuOpen(false)} />
+            <div className="puzzle-dropdown">
+              <button className="dropdown-item" onClick={() => { resetToInitialFit(); setMenuOpen(false) }}>
+                Reset zoom
+              </button>
+              <button className="dropdown-item" onClick={() => { onOpenSettings(); setMenuOpen(false) }}>
+                Settings
+              </button>
+              <div className="dropdown-divider" />
+              <button className="dropdown-item dropdown-item--danger" onClick={() => { setConfirmLeave(true); setMenuOpen(false) }}>
+                Back to front page
+              </button>
+              <div className="dropdown-divider" />
+              <div className="dropdown-hotkeys">
+                <span><kbd>Q</kbd> Zoom out</span>
+                <span><kbd>E</kbd> Zoom in</span>
+                <span><kbd>R</kbd> Reset zoom</span>
+                <span><kbd>Scroll</kbd> Zoom to cursor</span>
+                <span><kbd>WASD</kbd> Pan</span>
+                <span><kbd>Drag</kbd> Pan</span>
+              </div>
+            </div>
+          </>
+        )}
       </div>
 
+      {/* Upper right: theme toggle only */}
       <div className="puzzle-top-right">
         <div className="theme-toggle-wrap" onClick={onToggleTheme} role="button" aria-label="Toggle theme">
           <span className="theme-label">{theme === 'light' ? 'Light mode' : 'Dark mode'}</span>
@@ -391,25 +425,20 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
             <div className="toggle-thumb" />
           </div>
         </div>
-        <button className="top-settings-btn" onClick={onOpenSettings}>
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="12" cy="12" r="3"/>
-            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
-          </svg>
-          Settings
-        </button>
       </div>
 
-      <div className="toolbar-bottom">
-        <div className="hotkey-menu">
-          <span><kbd>Q</kbd> Zoom out</span>
-          <span><kbd>E</kbd> Zoom in</span>
-          <span><kbd>R</kbd> Reset zoom</span>
-          <span><kbd>Scroll</kbd> Zoom to cursor</span>
-          <span><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> Pan</span>
-          <span><kbd>Drag</kbd> Pan</span>
+      {/* Confirm leave dialog */}
+      {confirmLeave && (
+        <div className="confirm-backdrop" onClick={() => setConfirmLeave(false)}>
+          <div className="confirm-box" onClick={e => e.stopPropagation()}>
+            <p className="confirm-text">Leave this puzzle? Your progress will be lost.</p>
+            <div className="confirm-actions">
+              <button className="confirm-btn confirm-btn--cancel" onClick={() => setConfirmLeave(false)}>Keep playing</button>
+              <button className="confirm-btn confirm-btn--danger" onClick={onReset}>Leave</button>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
       {solved && <div className="solved-banner">Puzzle complete!</div>}
 
       <Stage

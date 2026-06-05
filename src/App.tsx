@@ -11,6 +11,14 @@ function calcGrid(count: number, aspect: number): { cols: number; rows: number }
 
 const DEFAULT_SETTINGS: Settings = { zoomStep: 1.25, resolution: 99, panStep: 80, theme: 'light' }
 
+function loadSettings(): Settings {
+  try {
+    const saved = localStorage.getItem('zenpiece-settings')
+    if (saved) return { ...DEFAULT_SETTINGS, ...JSON.parse(saved) }
+  } catch {}
+  return DEFAULT_SETTINGS
+}
+
 const QUICK_COUNTS: { n: number; light: string; dark: string }[] = [
   { n: 75,   light: '#ff8787', dark: '#e03131' },
   { n: 150,  light: '#ffa94d', dark: '#e8590c' },
@@ -24,18 +32,27 @@ const CUSTOM_LIGHT = '#f78fd4'
 const CUSTOM_DARK  = '#c2255c'
 
 export default function App() {
-  const [imageSrc, setImageSrc] = useState<string | null>(null)
-  const [imageAspect, setImageAspect] = useState(1)
+  const [imageSrc, setImageSrc] = useState<string | null>(() => {
+    try { return localStorage.getItem('zenpiece-image') } catch { return null }
+  })
+  const [imageAspect, setImageAspect] = useState<number>(() => {
+    try { return parseFloat(localStorage.getItem('zenpiece-image-aspect') ?? '1') || 1 } catch { return 1 }
+  })
   const [input, setInput] = useState('300')
   const [grid, setGrid] = useState<{ cols: number; rows: number } | null>(null)
   const [accentColor, setAccentColor] = useState(CUSTOM_DARK)
-  const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
+  const [settings, setSettings] = useState<Settings>(loadSettings)
   const [showSettings, setShowSettings] = useState(false)
 
   const { theme } = settings
+
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
   }, [theme])
+
+  useEffect(() => {
+    try { localStorage.setItem('zenpiece-settings', JSON.stringify(settings)) } catch {}
+  }, [settings])
 
   const pieceCount = parseInt(input)
   const validCount = !isNaN(pieceCount) && pieceCount >= 2 && pieceCount <= 10000
@@ -52,12 +69,26 @@ export default function App() {
       const src = reader.result as string
       const img = new Image()
       img.onload = () => {
+        const aspect = img.width / img.height
         setImageSrc(src)
-        setImageAspect(img.width / img.height)
+        setImageAspect(aspect)
+        try {
+          localStorage.setItem('zenpiece-image', src)
+          localStorage.setItem('zenpiece-image-aspect', String(aspect))
+        } catch {}
       }
       img.src = src
     }
     reader.readAsDataURL(file)
+  }
+
+  function handleRemoveImage() {
+    setImageSrc(null)
+    setImageAspect(1)
+    try {
+      localStorage.removeItem('zenpiece-image')
+      localStorage.removeItem('zenpiece-image-aspect')
+    } catch {}
   }
 
   function handleStart() {
@@ -128,10 +159,14 @@ export default function App() {
         {imageSrc ? (
           <div className="image-chosen">
             <img className="thumbnail" src={imageSrc} alt="Chosen" />
-            <label className="change-btn">
-              Change image
-              <input type="file" accept="image/*" onChange={handleFile} hidden />
-            </label>
+            <div className="image-actions">
+              <label className="change-btn">
+                Change image
+                <input type="file" accept="image/*" onChange={handleFile} hidden />
+              </label>
+              <span className="image-actions-sep">·</span>
+              <button className="remove-btn" onClick={handleRemoveImage}>Remove</button>
+            </div>
           </div>
         ) : (
           <label className="primary-btn">
@@ -184,11 +219,13 @@ export default function App() {
         </div>
       </div>
 
-      <div className="start-section start-actions">
-        <button className="primary-btn" disabled={!canStart} onClick={handleStart}>
-          Start puzzling
-        </button>
-      </div>
+      {imageSrc && (
+        <div className="start-section start-actions">
+          <button className="start-btn" disabled={!canStart} onClick={handleStart}>
+            Start puzzling
+          </button>
+        </div>
+      )}
 
       {showSettings && (
         <SettingsModal
