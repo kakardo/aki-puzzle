@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Stage, Layer, Image as KonvaImage, Rect } from 'react-konva'
 import type KonvaType from 'konva'
 import type { KonvaEventObject } from 'konva/lib/Node'
-import { generatePieces, calcPieceSize, type PieceData } from './pieces'
+import { generatePieceLayout, renderPiece, calcPieceSize, type PieceData } from './pieces'
 
 interface Props {
   imageSrc: string
@@ -12,6 +12,7 @@ interface Props {
   resolution: number
   panStep: number
   theme: 'light' | 'dark'
+  accentColor: string
   onReset: () => void
   onOpenSettings: () => void
   onToggleTheme: () => void
@@ -19,20 +20,21 @@ interface Props {
 
 const SNAP_THRESHOLD = 30
 
-export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep, resolution, panStep, theme, onReset, onOpenSettings, onToggleTheme }: Props) {
+export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep, resolution, panStep, theme, accentColor, onReset, onOpenSettings, onToggleTheme }: Props) {
   const [pieces, setPieces] = useState<PieceData[]>([])
-  const [pieceImages, setPieceImages] = useState<Record<string, HTMLImageElement>>({})
   const [groups, setGroups] = useState<Record<string, string>>({})
   const [solved, setSolved] = useState(false)
   const [size, setSize] = useState({ width: window.innerWidth, height: window.innerHeight })
   const [pieceSize, setPieceSize] = useState({ pw: 120, ph: 120, padding: 20 })
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
+  const [loadingSteps, setLoadingSteps] = useState<{ label: string; done: boolean; detail?: string }[]>([])
   const stageRef = useRef<KonvaType.Stage>(null)
   const nodeRefs = useRef<Record<string, KonvaType.Image>>({})
   const lastPos = useRef<{ x: number; y: number } | null>(null)
   const isPanning = useRef(false)
   const panAnchor = useRef({ x: 0, y: 0 })
+  const initialFit = useRef<{ zoom: number; pan: { x: number; y: number } } | null>(null)
   const groupsRef = useRef(groups)
   const piecesRef = useRef(pieces)
 
@@ -47,24 +49,59 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
   useEffect(() => {
     const img = new window.Image()
     img.src = imageSrc
-    img.onload = () => {
-      const ps = calcPieceSize(img, COLS, ROWS, size.width, size.height)
-      setPieceSize(ps)
-      const generated = generatePieces(img, COLS, ROWS, size.width, size.height, resolution)
-      setPieces(generated)
+    img.onload = async () => {
       setGroups({})
       setSolved(false)
-      const images: Record<string, HTMLImageElement> = {}
-      let loaded = 0
-      generated.forEach(p => {
-        const i = new window.Image()
-        i.src = p.imageDataUrl
-        i.onload = () => {
-          images[p.id] = i
-          loaded++
-          if (loaded === generated.length) setPieceImages({ ...images })
+      setZoom(1)
+      setPan({ x: 0, y: 0 })
+      initialFit.current = null
+      setPieces([])
+
+      const total = COLS * ROWS
+
+      setLoadingSteps([
+        { label: 'Calculating layout', done: false },
+        { label: `Cutting pieces (0 / ${total})`, done: false },
+      ])
+
+      await new Promise(r => requestAnimationFrame(r))
+
+      // Step 1: fast layout
+      const ps = calcPieceSize(img, COLS, ROWS, size.width, size.height)
+      setPieceSize(ps)
+      const { pieces: layouts, pw, ph, padding } = generatePieceLayout(img, COLS, ROWS, size.width, size.height)
+
+      setLoadingSteps([
+        { label: 'Calculating layout', done: true },
+        { label: `Cutting pieces (0 / ${total})`, done: false },
+      ])
+      await new Promise(r => requestAnimationFrame(r))
+
+      // Step 2: render canvases in chunks
+      const CHUNK = 20
+      const rendered: PieceData[] = []
+      let lastUpdate = Date.now()
+
+      for (let i = 0; i < layouts.length; i += CHUNK) {
+        for (const layout of layouts.slice(i, i + CHUNK)) {
+          const { canvas, displayW, displayH } = renderPiece(layout, img, COLS, ROWS, pw, ph, padding, resolution)
+          rendered.push({ ...layout, canvas, displayW, displayH })
         }
-      })
+        const done = Math.min(i + CHUNK, total)
+        const now = Date.now()
+        if (now - lastUpdate >= 250 || done === total) {
+          setLoadingSteps([
+            { label: 'Calculating layout', done: true },
+            { label: `Cutting pieces (${done} / ${total})`, done: done === total },
+          ])
+          lastUpdate = now
+          await new Promise(r => setTimeout(r, 0))
+        }
+      }
+
+      setPieces(rendered)
+      setLoadingSteps([])
+      fitAll(rendered, ps)
     }
   }, [imageSrc])
 
@@ -97,8 +134,7 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
         setZoom(newZoom)
         setPan({ x: cx - mouseX * newZoom, y: cy - mouseY * newZoom })
       } else if (key === 'r') {
-        setZoom(1)
-        setPan({ x: 0, y: 0 })
+        resetToInitialFit()
       } else if (['w', 'a', 's', 'd'].includes(key)) {
         const delta = {
           w: { x: 0, y: panStep },
@@ -245,6 +281,47 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
   const originX = (size.width - COLS * pieceSize.pw) / 2
   const originY = (size.height - ROWS * pieceSize.ph) / 2
 
+  function fitAll(allPieces: PieceData[], ps = pieceSize) {
+    if (allPieces.length === 0) return
+    const fw = COLS * ps.pw
+    const fh = ROWS * ps.ph
+    const ox = (size.width - fw) / 2
+    const oy = (size.height - fh) / 2
+
+    let minX = ox, minY = oy, maxX = ox + fw, maxY = oy + fh
+    for (const p of allPieces) {
+      minX = Math.min(minX, p.x)
+      minY = Math.min(minY, p.y)
+      maxX = Math.max(maxX, p.x + p.displayW)
+      maxY = Math.max(maxY, p.y + p.displayH)
+    }
+
+    const pad = 40
+    const fitZoom = Math.min(
+      (size.width - pad * 2) / (maxX - minX),
+      (size.height - pad * 2) / (maxY - minY),
+      1
+    )
+    const fitPan = {
+      x: (size.width - (maxX - minX) * fitZoom) / 2 - minX * fitZoom,
+      y: (size.height - (maxY - minY) * fitZoom) / 2 - minY * fitZoom,
+    }
+    setZoom(fitZoom)
+    setPan(fitPan)
+    zoomRef.current = fitZoom
+    panRef.current = fitPan
+    if (!initialFit.current) initialFit.current = { zoom: fitZoom, pan: fitPan }
+  }
+
+  function resetToInitialFit() {
+    const f = initialFit.current
+    if (!f) return
+    setZoom(f.zoom)
+    setPan(f.pan)
+    zoomRef.current = f.zoom
+    panRef.current = f.pan
+  }
+
   function handleWheel(e: KonvaEventObject<WheelEvent>) {
     e.evt.preventDefault()
     const stage = stageRef.current
@@ -288,9 +365,21 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
 
   return (
     <div style={{ position: 'relative', background: theme === 'dark' ? '#18181b' : '#e8e8e2', width: '100vw', height: '100vh' }}>
+      {loadingSteps.length > 0 && (
+        <div className="loading-overlay">
+          <div className="loading-box">
+            {loadingSteps.map((step, i) => (
+              <div key={i} className={`loading-step${step.done ? ' loading-step--done' : ''}`}>
+                <span className="loading-step-icon">{step.done ? '✓' : '○'}</span>
+                <span>{step.label}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <div className="toolbar">
         <button className="top-settings-btn" onClick={onReset}>New puzzle</button>
-        <button className="top-settings-btn" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }) }}>Reset zoom</button>
+        <button className="top-settings-btn" onClick={resetToInitialFit}>Reset zoom</button>
       </div>
 
       <div className="puzzle-top-right">
@@ -350,43 +439,35 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
           />
         </Layer>
         <Layer>
-          {pieces.filter(p => p.locked).map(p => {
-            const img = pieceImages[p.id]
-            if (!img) return null
-            return (
-              <KonvaImage
-                key={p.id}
-                ref={node => { if (node) nodeRefs.current[p.id] = node }}
-                image={img}
-                x={p.x}
-                y={p.y}
-                width={p.displayW}
-                height={p.displayH}
-                draggable={false}
-              />
-            )
-          })}
+          {pieces.filter(p => p.locked).map(p => (
+            <KonvaImage
+              key={p.id}
+              ref={node => { if (node) nodeRefs.current[p.id] = node }}
+              image={p.canvas}
+              x={p.x}
+              y={p.y}
+              width={p.displayW}
+              height={p.displayH}
+              draggable={false}
+            />
+          ))}
         </Layer>
         <Layer>
-          {pieces.filter(p => !p.locked).map(p => {
-            const img = pieceImages[p.id]
-            if (!img) return null
-            return (
-              <KonvaImage
-                key={p.id}
-                ref={node => { if (node) nodeRefs.current[p.id] = node }}
-                image={img}
-                x={p.x}
-                y={p.y}
-                width={p.displayW}
-                height={p.displayH}
-                draggable
-                onDragStart={e => handleDragStart(p.id, e.target.x(), e.target.y())}
-                onDragMove={e => handleDragMove(p.id, e.target.x(), e.target.y())}
-                onDragEnd={e => handleDragEnd(p.id, e.target.x(), e.target.y())}
-              />
-            )
-          })}
+          {pieces.filter(p => !p.locked).map(p => (
+            <KonvaImage
+              key={p.id}
+              ref={node => { if (node) nodeRefs.current[p.id] = node }}
+              image={p.canvas}
+              x={p.x}
+              y={p.y}
+              width={p.displayW}
+              height={p.displayH}
+              draggable
+              onDragStart={e => handleDragStart(p.id, e.target.x(), e.target.y())}
+              onDragMove={e => handleDragMove(p.id, e.target.x(), e.target.y())}
+              onDragEnd={e => handleDragEnd(p.id, e.target.x(), e.target.y())}
+            />
+          ))}
         </Layer>
       </Stage>
     </div>

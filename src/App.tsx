@@ -28,6 +28,7 @@ export default function App() {
   const [imageAspect, setImageAspect] = useState(1)
   const [input, setInput] = useState('300')
   const [grid, setGrid] = useState<{ cols: number; rows: number } | null>(null)
+  const [accentColor, setAccentColor] = useState(CUSTOM_DARK)
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
   const [showSettings, setShowSettings] = useState(false)
 
@@ -61,6 +62,7 @@ export default function App() {
 
   function handleStart() {
     if (!canStart) return
+    setAccentColor(matchedQuick ? matchedQuick.dark : CUSTOM_DARK)
     setGrid(calcGrid(pieceCount, imageAspect))
   }
 
@@ -75,6 +77,7 @@ export default function App() {
           resolution={settings.resolution}
           panStep={settings.panStep}
           theme={settings.theme}
+          accentColor={accentColor}
           onReset={() => setGrid(null)}
           onOpenSettings={() => setShowSettings(true)}
           onToggleTheme={() => setSettings(s => ({ ...s, theme: s.theme === 'light' ? 'dark' : 'light' }))}

@@ -355,6 +355,54 @@ kbd {
   background: var(--hover);
 }
 
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.loading-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.5rem 2rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+  min-width: 220px;
+  pointer-events: auto;
+}
+
+.loading-step {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-size: 0.9rem;
+  color: var(--subtle);
+  transition: color 0.2s;
+}
+
+.loading-step--done {
+  color: var(--text);
+}
+
+.loading-step-icon {
+  font-size: 0.85rem;
+  width: 1rem;
+  text-align: center;
+  flex-shrink: 0;
+  color: var(--subtle);
+}
+
+.loading-step--done .loading-step-icon {
+  color: #2f9e44;
+}
+
 .solved-banner {
   position: fixed;
   top: 50%;
