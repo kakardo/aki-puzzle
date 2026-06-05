@@ -11,13 +11,15 @@ interface Props {
   zoomStep: number
   resolution: number
   panStep: number
+  theme: 'light' | 'dark'
   onReset: () => void
   onOpenSettings: () => void
+  onToggleTheme: () => void
 }
 
 const SNAP_THRESHOLD = 30
 
-export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep, resolution, panStep, onReset, onOpenSettings }: Props) {
+export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep, resolution, panStep, theme, onReset, onOpenSettings, onToggleTheme }: Props) {
   const [pieces, setPieces] = useState<PieceData[]>([])
   const [pieceImages, setPieceImages] = useState<Record<string, HTMLImageElement>>({})
   const [groups, setGroups] = useState<Record<string, string>>({})
@@ -285,11 +287,31 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
   }
 
   return (
-    <div style={{ position: 'relative', background: '#e8e8e2', width: '100vw', height: '100vh' }}>
+    <div style={{ position: 'relative', background: theme === 'dark' ? '#18181b' : '#e8e8e2', width: '100vw', height: '100vh' }}>
       <div className="toolbar">
-        <button className="reset-btn" onClick={onReset}>New puzzle</button>
-        <button className="reset-btn" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }) }}>Reset zoom</button>
-        <button className="reset-btn" onClick={onOpenSettings}>Settings</button>
+        <button className="top-settings-btn" onClick={onReset}>New puzzle</button>
+        <button className="top-settings-btn" onClick={() => { setZoom(1); setPan({ x: 0, y: 0 }) }}>Reset zoom</button>
+      </div>
+
+      <div className="puzzle-top-right">
+        <div className="theme-toggle-wrap" onClick={onToggleTheme} role="button" aria-label="Toggle theme">
+          <span className="theme-label">{theme === 'light' ? 'Light mode' : 'Dark mode'}</span>
+          <div className={`toggle-track${theme === 'dark' ? ' toggle-track--on' : ''}`}>
+            <span className="toggle-icon toggle-icon--sun">☀️</span>
+            <span className="toggle-icon toggle-icon--moon">🌙</span>
+            <div className="toggle-thumb" />
+          </div>
+        </div>
+        <button className="top-settings-btn" onClick={onOpenSettings}>
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+          Settings
+        </button>
+      </div>
+
+      <div className="toolbar-bottom">
         <div className="hotkey-menu">
           <span><kbd>Q</kbd> Zoom out</span>
           <span><kbd>E</kbd> Zoom in</span>
@@ -322,9 +344,9 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
             y={originY}
             width={COLS * pieceSize.pw}
             height={ROWS * pieceSize.ph}
-            stroke="rgba(0,0,0,0.15)"
+            stroke={theme === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.15)'}
             strokeWidth={1}
-            fill="rgba(0,0,0,0.02)"
+            fill={theme === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)'}
           />
         </Layer>
         <Layer>

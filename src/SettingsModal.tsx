@@ -4,11 +4,15 @@ export interface Settings {
   zoomStep: number
   resolution: number
   panStep: number
+  theme: 'light' | 'dark'
 }
 
 const ZOOM_MIN = 1.05
 const ZOOM_MAX = 2.0
 const ZOOM_INC = 0.05
+const PAN_MIN = 20
+const PAN_MAX = 300
+const PAN_INC = 20
 
 interface Props {
   settings: Settings
@@ -18,7 +22,6 @@ interface Props {
 
 function Stepper({
   label,
-  value,
   display,
   onDecrement,
   onIncrement,
@@ -26,7 +29,6 @@ function Stepper({
   incrementDisabled,
 }: {
   label: string
-  value?: number
   display: string
   onDecrement: () => void
   onIncrement: () => void
@@ -45,12 +47,8 @@ function Stepper({
   )
 }
 
-const PAN_MIN = 20
-const PAN_MAX = 300
-const PAN_INC = 20
-
 export default function SettingsModal({ settings, onChange, onClose }: Props) {
-  const { zoomStep, resolution, panStep } = settings
+  const { zoomStep, resolution, panStep, theme } = settings
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -58,6 +56,24 @@ export default function SettingsModal({ settings, onChange, onClose }: Props) {
         <div className="modal-header">
           <h2>Settings</h2>
           <button className="modal-close" onClick={onClose}>×</button>
+        </div>
+
+        <div className="setting-row">
+          <span className="setting-label">Theme</span>
+          <div className="theme-toggle">
+            <button
+              className={`theme-btn${theme === 'light' ? ' active' : ''}`}
+              onClick={() => onChange({ ...settings, theme: 'light' })}
+            >
+              Light
+            </button>
+            <button
+              className={`theme-btn${theme === 'dark' ? ' active' : ''}`}
+              onClick={() => onChange({ ...settings, theme: 'dark' })}
+            >
+              Dark
+            </button>
+          </div>
         </div>
 
         <Stepper
