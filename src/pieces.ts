@@ -89,13 +89,13 @@ function edgeWithKnob(
   ctx.lineTo(bx, by)
 }
 
-// Knob size is entered as a number where 100 is the standard size. The tab
-// reaches 0.78u outward, so at 128 the knob tip reaches the piece border, the
-// point where it would meet the neighbouring piece. That is the hard ceiling;
-// going higher would clip the knob. The floor just keeps it visible.
+// Knob size controls how large the tabs are. The tab reaches 0.78u outward,
+// so at 128 the knob tip reaches the piece border, the point where it would
+// meet the neighbouring piece. That is the hard ceiling; going higher would
+// clip the knob. The floor just keeps it visible.
 export const KNOB_MIN = 40
 export const KNOB_MAX = 128
-export const KNOB_DEFAULT = 113
+export const KNOB_DEFAULT = 116
 function knobScale(knobSize: number) {
   const pct = Number.isFinite(knobSize) ? knobSize : 100
   return Math.min(KNOB_MAX, Math.max(KNOB_MIN, pct)) / 100
@@ -199,9 +199,10 @@ export function generatePieceLayout(
   cols: number,
   rows: number,
   stageWidth: number,
-  stageHeight: number
+  stageHeight: number,
+  knobSize = 100
 ): { pieces: Omit<PieceData, 'imageDataUrl' | 'displayW' | 'displayH'>[], pw: number; ph: number; padding: number } {
-  const { pw, ph, padding } = calcPieceSize(image, cols, rows, stageWidth, stageHeight)
+  const { pw, ph, padding } = calcPieceSize(image, cols, rows, stageWidth, stageHeight, knobSize)
 
   const gap = 8
   const slotW = pw + padding * 2 + gap

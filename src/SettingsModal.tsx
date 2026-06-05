@@ -141,7 +141,7 @@ export default function SettingsModal({ settings, onChange, onClose }: Props) {
             <span className="knob-unit">%</span>
           </div>
         </div>
-        <p className="setting-hint">100 = standard, default {KNOB_DEFAULT}. Range {KNOB_MIN} to {KNOB_MAX}, where knobs reach the piece edge.</p>
+        <p className="setting-hint">Default {KNOB_DEFAULT}. Range {KNOB_MIN} to {KNOB_MAX}, where knobs reach the piece edge.</p>
 
         <div className="setting-row">
           <span className="setting-label">Piece style</span>

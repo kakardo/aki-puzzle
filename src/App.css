@@ -333,6 +333,25 @@
   transition: background 0.3s;
 }
 
+.fireworks-mode .puzzle-menu-btn {
+  background: #27272a;
+  border-color: #4c4580;
+  transition: background 3000ms ease-in-out, border-color 3000ms ease-in-out, box-shadow 0.15s;
+}
+
+.fireworks-mode .hamburger-line {
+  background: #4c4580;
+  transition: background 3000ms ease-in-out;
+}
+
+.fireworks-returning .puzzle-menu-btn {
+  transition: background 3000ms ease-in-out, border-color 3000ms ease-in-out, box-shadow 0.15s;
+}
+
+.fireworks-returning .hamburger-line {
+  transition: background 3000ms ease-in-out;
+}
+
 .puzzle-menu-backdrop {
   position: fixed;
   inset: 0;
@@ -605,17 +624,3 @@ kbd {
   color: #2f9e44;
 }
 
-.solved-banner {
-  position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 20;
-  background: #fff;
-  padding: 1.5rem 3rem;
-  border-radius: 8px;
-  font-size: 1.5rem;
-  font-weight: 500;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.15);
-  pointer-events: none;
-}

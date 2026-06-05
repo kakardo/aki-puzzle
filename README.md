@@ -41,12 +41,12 @@ Open the menu (top left) and choose **Settings**.
 | Zoom step | 1.05x to 2.00x | 1.25x |
 | Piece quality | Normal (1x), Sharp (2x), Auto | Auto |
 | WASD distance | 20 px to 300 px | 80 px |
-| Knob size | 40 to 128 | 113 |
+| Knob size | 40 to 128 | 116 |
 | Piece style | Standard, Artsy | Standard |
 
 Auto quality matches the image's native pixel density and is the right choice for most images. Lower settings speed up generation for very high piece counts.
 
-Knob size is typed in as a number, where 100 is the standard size. The maximum of 128 is the point where the knobs reach the edge of the piece, so anything larger would be clipped. Changing it re-cuts the pieces straight away.
+Knob size is typed in as a number. The maximum of 128 is the point where the knobs reach the edge of the piece, so anything larger would be clipped. Changing it re-cuts the pieces straight away.
 
 ## Piece counts
 

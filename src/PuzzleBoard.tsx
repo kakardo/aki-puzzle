@@ -3,6 +3,7 @@ import { Stage, Layer, Image as KonvaImage, Rect } from 'react-konva'
 import type KonvaType from 'konva'
 import type { KonvaEventObject } from 'konva/lib/Node'
 import { generatePieceLayout, renderPiece, calcPieceSize, type PieceData } from './pieces'
+import Fireworks from './Fireworks'
 
 interface Props {
   imageSrc: string
@@ -26,6 +27,8 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
   const [pieces, setPieces] = useState<PieceData[]>([])
   const [groups, setGroups] = useState<Record<string, string>>({})
   const [solved, setSolved] = useState(false)
+  const [fireworksDark, setFireworksDark] = useState(false)
+  const [fireworksReturning, setFireworksReturning] = useState(false)
   const [size, setSize] = useState({ width: window.innerWidth, height: window.innerHeight })
   const [pieceSize, setPieceSize] = useState({ pw: 120, ph: 120, padding: 20 })
   const [zoom, setZoom] = useState(1)
@@ -96,7 +99,7 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
       const ps = calcPieceSize(img, COLS, ROWS, size.width, size.height, knobSize)
       setPieceSize(ps)
       pieceSizeRef.current = ps
-      const { pieces: layouts, pw, ph, padding } = generatePieceLayout(img, COLS, ROWS, size.width, size.height)
+      const { pieces: layouts, pw, ph, padding } = generatePieceLayout(img, COLS, ROWS, size.width, size.height, knobSize)
       layoutRef.current = layouts
 
       setLoadingSteps([
@@ -301,7 +304,7 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
       })
 
       setGroups(newGroups)
-      if (next.every(p => p.locked)) setSolved(true)
+      if (next.every(p => p.locked)) { setSolved(true); setFireworksDark(true) }
       return next
     })
   }
@@ -392,7 +395,13 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
   }
 
   return (
-    <div className="puzzle-canvas" style={{ background: theme === 'dark' ? '#18181b' : '#e8e8e2' }}>
+    <div
+      className="puzzle-canvas"
+      style={{
+        background: fireworksDark ? '#000' : (theme === 'dark' ? '#18181b' : '#e8e8e2'),
+        transition: (fireworksDark || fireworksReturning) ? 'background 3000ms ease-in-out' : 'background 0.3s',
+      }}
+    >
       {loadingSteps.length > 0 && (
         <div className="loading-overlay">
           <div className="loading-box">
@@ -406,7 +415,7 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
         </div>
       )}
       {/* Upper left: menu button + dropdown */}
-      <div className="puzzle-menu-wrap">
+      <div className={['puzzle-menu-wrap', fireworksDark ? 'fireworks-mode' : '', fireworksReturning ? 'fireworks-returning' : ''].filter(Boolean).join(' ')}>
         <button className="puzzle-menu-btn" onClick={() => setMenuOpen(o => !o)}>
           <span className="hamburger-line" />
           <span className="hamburger-line" />
@@ -465,7 +474,18 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
           </div>
         </div>
       )}
-      {solved && <div className="solved-banner">Puzzle complete!</div>}
+      {solved && (
+        <Fireworks
+          onFadeOutStart={() => {
+            setFireworksDark(false)
+            setFireworksReturning(true)
+            setTimeout(() => {
+              setSolved(false)
+              setFireworksReturning(false)
+            }, 3000)
+          }}
+        />
+      )}
 
       <Stage
         ref={stageRef}
@@ -490,14 +510,13 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
             height={ROWS * pieceSize.ph}
             stroke={theme === 'dark' ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.15)'}
             strokeWidth={1}
-            fill={theme === 'dark' ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)'}
           />
         </Layer>
         <Layer>
           {pieces.filter(p => p.locked).map(p => (
             <KonvaImage
               key={p.id}
-              ref={node => { if (node) nodeRefs.current[p.id] = node }}
+              ref={node => { if (!node) delete nodeRefs.current[p.id] }}
               image={p.canvas}
               x={p.x}
               y={p.y}
