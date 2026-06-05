@@ -11,6 +11,7 @@ interface Props {
   zoomStep: number
   resolution: number
   panStep: number
+  pieceStyle: string
   theme: 'light' | 'dark'
   accentColor: string
   onReset: () => void
@@ -20,7 +21,7 @@ interface Props {
 
 const SNAP_THRESHOLD = 30
 
-export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep, resolution, panStep, theme, accentColor, onReset, onOpenSettings, onToggleTheme }: Props) {
+export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep, resolution, panStep, pieceStyle, theme, accentColor, onReset, onOpenSettings, onToggleTheme }: Props) {
   const [pieces, setPieces] = useState<PieceData[]>([])
   const [groups, setGroups] = useState<Record<string, string>>({})
   const [solved, setSolved] = useState(false)
@@ -86,7 +87,7 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
 
       for (let i = 0; i < layouts.length; i += CHUNK) {
         for (const layout of layouts.slice(i, i + CHUNK)) {
-          const { canvas, displayW, displayH } = renderPiece(layout, img, COLS, ROWS, pw, ph, padding, resolution)
+          const { canvas, displayW, displayH } = renderPiece(layout, img, COLS, ROWS, pw, ph, padding, resolution, pieceStyle)
           rendered.push({ ...layout, canvas, displayW, displayH })
         }
         const done = Math.min(i + CHUNK, total)

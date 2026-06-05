@@ -9,12 +9,20 @@ function calcGrid(count: number, aspect: number): { cols: number; rows: number }
   return { cols, rows }
 }
 
-const DEFAULT_SETTINGS: Settings = { zoomStep: 1.25, resolution: 99, panStep: 80, theme: 'light' }
+const DEFAULT_SETTINGS: Settings = { zoomStep: 1.25, resolution: 99, panStep: 80, theme: 'light', pieceStyle: 'standard' }
+
+const VALID_PIECE_STYLES = ['standard', 'artsy']
 
 function loadSettings(): Settings {
   try {
     const saved = localStorage.getItem('zenpiece-settings')
-    if (saved) return { ...DEFAULT_SETTINGS, ...JSON.parse(saved) }
+    if (saved) {
+      const parsed = JSON.parse(saved)
+      if (!VALID_PIECE_STYLES.includes(parsed.pieceStyle)) {
+        parsed.pieceStyle = 'standard'
+      }
+      return { ...DEFAULT_SETTINGS, ...parsed }
+    }
   } catch {}
   return DEFAULT_SETTINGS
 }
@@ -107,6 +115,7 @@ export default function App() {
           zoomStep={settings.zoomStep}
           resolution={settings.resolution}
           panStep={settings.panStep}
+          pieceStyle={settings.pieceStyle}
           theme={settings.theme}
           accentColor={accentColor}
           onReset={() => setGrid(null)}

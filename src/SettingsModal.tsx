@@ -1,10 +1,13 @@
 import './SettingsModal.css'
 
+export type PieceStyle = 'standard' | 'artsy'
+
 export interface Settings {
   zoomStep: number
   resolution: number
   panStep: number
   theme: 'light' | 'dark'
+  pieceStyle: PieceStyle
 }
 
 const ZOOM_MIN = 1.05
@@ -47,8 +50,13 @@ function Stepper({
   )
 }
 
+const PIECE_STYLES: { value: PieceStyle; label: string }[] = [
+  { value: 'standard', label: 'Standard' },
+  { value: 'artsy',    label: 'Artsy' },
+]
+
 export default function SettingsModal({ settings, onChange, onClose }: Props) {
-  const { zoomStep, resolution, panStep, theme } = settings
+  const { zoomStep, resolution, panStep, theme, pieceStyle } = settings
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -101,6 +109,22 @@ export default function SettingsModal({ settings, onChange, onClose }: Props) {
           )
         })()}
         <p className="setting-hint">Auto matches the image's native pixel density. Applies on next puzzle.</p>
+
+        <div className="setting-row">
+          <span className="setting-label">Piece style</span>
+          <div className="theme-toggle">
+            {PIECE_STYLES.map(s => (
+              <button
+                key={s.value}
+                className={`theme-btn${pieceStyle === s.value ? ' active' : ''}`}
+                onClick={() => onChange({ ...settings, pieceStyle: s.value })}
+              >
+                {s.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <p className="setting-hint">Applies on next puzzle.</p>
 
         <Stepper
           label="WASD distance"

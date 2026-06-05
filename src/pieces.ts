@@ -13,7 +13,8 @@ export interface PieceData {
   locked: boolean
 }
 
-function drawPiecePath(
+// Standard: symmetric bezier tabs centred on each edge
+function drawPathStandard(
   ctx: CanvasRenderingContext2D,
   tabs: [number, number, number, number],
   w: number,
@@ -36,6 +37,44 @@ function drawPiecePath(
   ctx.bezierCurveTo(-left * t, h / 2 + t, -left * t, h / 2 - t, 0, h / 2 - t)
   ctx.lineTo(0, 0)
   ctx.closePath()
+}
+
+// Artsy: copy of Standard — modify this one to create a distinct look
+function drawPathArtsy(
+  ctx: CanvasRenderingContext2D,
+  tabs: [number, number, number, number],
+  w: number,
+  h: number,
+  t: number
+) {
+  const [top, right, bottom, left] = tabs
+  ctx.beginPath()
+  ctx.moveTo(0, 0)
+  ctx.lineTo(w / 2 - t, 0)
+  ctx.bezierCurveTo(w / 2 - t, -top * t, w / 2 + t, -top * t, w / 2 + t, 0)
+  ctx.lineTo(w, 0)
+  ctx.lineTo(w, h / 2 - t)
+  ctx.bezierCurveTo(w + right * t, h / 2 - t, w + right * t, h / 2 + t, w, h / 2 + t)
+  ctx.lineTo(w, h)
+  ctx.lineTo(w / 2 + t, h)
+  ctx.bezierCurveTo(w / 2 + t, h + bottom * t, w / 2 - t, h + bottom * t, w / 2 - t, h)
+  ctx.lineTo(0, h)
+  ctx.lineTo(0, h / 2 + t)
+  ctx.bezierCurveTo(-left * t, h / 2 + t, -left * t, h / 2 - t, 0, h / 2 - t)
+  ctx.lineTo(0, 0)
+  ctx.closePath()
+}
+
+function drawPiecePath(
+  ctx: CanvasRenderingContext2D,
+  tabs: [number, number, number, number],
+  w: number,
+  h: number,
+  t: number,
+  style: string
+) {
+  if (style === 'artsy') return drawPathArtsy(ctx, tabs, w, h, t)
+  return drawPathStandard(ctx, tabs, w, h, t)
 }
 
 export function calcPieceSize(
@@ -155,15 +194,16 @@ export function generatePieceLayout(
 
 // Phase 2: render a single piece canvas. Call in a chunked loop.
 export function renderPiece(
-  piece: Omit<PieceData, 'imageDataUrl' | 'displayW' | 'displayH'>,
+  piece: Omit<PieceData, 'canvas' | 'displayW' | 'displayH'>,
   image: HTMLImageElement,
   cols: number,
   rows: number,
   pw: number,
   ph: number,
   padding: number,
-  resolution: number
-): { imageDataUrl: string; displayW: number; displayH: number } {
+  resolution: number,
+  pieceStyle = 'standard'
+): { canvas: HTMLCanvasElement; displayW: number; displayH: number } {
   const tabSize = padding
   const naturalRes = Math.min(image.width / (cols * pw), image.height / (rows * ph))
   const RES = Math.max(1, Math.min(resolution, naturalRes))
@@ -178,7 +218,7 @@ export function renderPiece(
 
   ctx.save()
   ctx.translate(padding, padding)
-  drawPiecePath(ctx, piece.tabs, pw, ph, tabSize)
+  drawPiecePath(ctx, piece.tabs, pw, ph, tabSize, pieceStyle)
   ctx.clip()
 
   const sx = (piece.col * image.width)  / cols
@@ -199,7 +239,7 @@ export function renderPiece(
 
   ctx.save()
   ctx.translate(padding, padding)
-  drawPiecePath(ctx, piece.tabs, pw, ph, tabSize)
+  drawPiecePath(ctx, piece.tabs, pw, ph, tabSize, pieceStyle)
   ctx.strokeStyle = 'rgba(0,0,0,0.3)'
   ctx.lineWidth = 1
   ctx.stroke()
