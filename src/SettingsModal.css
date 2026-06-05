@@ -113,8 +113,14 @@
 }
 
 .stepper-value {
-  min-width: 4rem;
+  width: 6rem;
+  min-height: 2.2rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   text-align: center;
+  white-space: normal;
+  line-height: 1.15;
   font-size: 0.9rem;
   font-variant-numeric: tabular-nums;
   color: var(--text);
@@ -125,4 +131,34 @@
   font-size: 0.78rem;
   color: var(--subtle);
   text-align: center;
+}
+
+.setting-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 0.2rem 0;
+}
+
+.knob-field {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.knob-input {
+  width: 4rem;
+  height: 2rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.9rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.knob-unit {
+  font-size: 0.9rem;
+  color: var(--subtle);
 }

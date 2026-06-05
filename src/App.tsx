@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import PuzzleBoard from './PuzzleBoard'
 import SettingsModal, { type Settings } from './SettingsModal'
+import { KNOB_DEFAULT } from './pieces'
 import './App.css'
 
 function calcGrid(count: number, aspect: number): { cols: number; rows: number } {
@@ -9,7 +10,7 @@ function calcGrid(count: number, aspect: number): { cols: number; rows: number }
   return { cols, rows }
 }
 
-const DEFAULT_SETTINGS: Settings = { zoomStep: 1.25, resolution: 99, panStep: 80, theme: 'light', pieceStyle: 'standard' }
+const DEFAULT_SETTINGS: Settings = { zoomStep: 1.25, resolution: 99, panStep: 80, theme: 'light', knobSize: KNOB_DEFAULT, pieceStyle: 'standard' }
 
 const VALID_PIECE_STYLES = ['standard', 'artsy']
 
@@ -18,9 +19,8 @@ function loadSettings(): Settings {
     const saved = localStorage.getItem('zenpiece-settings')
     if (saved) {
       const parsed = JSON.parse(saved)
-      if (!VALID_PIECE_STYLES.includes(parsed.pieceStyle)) {
-        parsed.pieceStyle = 'standard'
-      }
+      if (!VALID_PIECE_STYLES.includes(parsed.pieceStyle)) parsed.pieceStyle = 'standard'
+      if (typeof parsed.knobSize !== 'number' || !Number.isFinite(parsed.knobSize)) parsed.knobSize = KNOB_DEFAULT
       return { ...DEFAULT_SETTINGS, ...parsed }
     }
   } catch {}
@@ -115,6 +115,7 @@ export default function App() {
           zoomStep={settings.zoomStep}
           resolution={settings.resolution}
           panStep={settings.panStep}
+          knobSize={settings.knobSize}
           pieceStyle={settings.pieceStyle}
           theme={settings.theme}
           accentColor={accentColor}

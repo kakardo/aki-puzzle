@@ -11,6 +11,7 @@ interface Props {
   zoomStep: number
   resolution: number
   panStep: number
+  knobSize: number
   pieceStyle: string
   theme: 'light' | 'dark'
   accentColor: string
@@ -21,7 +22,7 @@ interface Props {
 
 const SNAP_THRESHOLD = 30
 
-export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep, resolution, panStep, pieceStyle, theme, accentColor, onReset, onOpenSettings, onToggleTheme }: Props) {
+export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep, resolution, panStep, knobSize, pieceStyle, theme, accentColor, onReset, onOpenSettings, onToggleTheme }: Props) {
   const [pieces, setPieces] = useState<PieceData[]>([])
   const [groups, setGroups] = useState<Record<string, string>>({})
   const [solved, setSolved] = useState(false)
@@ -38,6 +39,9 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
   const isPanning = useRef(false)
   const panAnchor = useRef({ x: 0, y: 0 })
   const initialFit = useRef<{ zoom: number; pan: { x: number; y: number } } | null>(null)
+  const sourceImageRef = useRef<HTMLImageElement | null>(null)
+  const layoutRef = useRef<Omit<PieceData, 'canvas' | 'displayW' | 'displayH'>[]>([])
+  const pieceSizeRef = useRef({ pw: 120, ph: 120, padding: 20 })
   const groupsRef = useRef(groups)
   const piecesRef = useRef(pieces)
 
@@ -48,6 +52,24 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
 
   useEffect(() => { groupsRef.current = groups }, [groups])
   useEffect(() => { piecesRef.current = pieces }, [pieces])
+
+  // Re-render piece canvases when knobSize or pieceStyle changes mid-puzzle
+  useEffect(() => {
+    const img = sourceImageRef.current
+    const layouts = layoutRef.current
+    if (!img || layouts.length === 0) return
+    // Recalculate padding since it depends on knobSize
+    const ps = calcPieceSize(img, COLS, ROWS, size.width, size.height, knobSize)
+    pieceSizeRef.current = ps
+    setPieceSize(ps)
+    const { pw, ph, padding } = ps
+    setPieces(prev => prev.map(p => {
+      const layout = layouts.find(l => l.id === p.id)
+      if (!layout) return p
+      const { canvas, displayW, displayH } = renderPiece(layout, img, COLS, ROWS, pw, ph, padding, resolution, pieceStyle, knobSize)
+      return { ...p, canvas, displayW, displayH }
+    }))
+  }, [knobSize, pieceStyle])
 
   useEffect(() => {
     const img = new window.Image()
@@ -70,9 +92,12 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
       await new Promise(r => requestAnimationFrame(r))
 
       // Step 1: fast layout
-      const ps = calcPieceSize(img, COLS, ROWS, size.width, size.height)
+      sourceImageRef.current = img
+      const ps = calcPieceSize(img, COLS, ROWS, size.width, size.height, knobSize)
       setPieceSize(ps)
+      pieceSizeRef.current = ps
       const { pieces: layouts, pw, ph, padding } = generatePieceLayout(img, COLS, ROWS, size.width, size.height)
+      layoutRef.current = layouts
 
       setLoadingSteps([
         { label: 'Calculating layout', done: true },
@@ -87,7 +112,7 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
 
       for (let i = 0; i < layouts.length; i += CHUNK) {
         for (const layout of layouts.slice(i, i + CHUNK)) {
-          const { canvas, displayW, displayH } = renderPiece(layout, img, COLS, ROWS, pw, ph, padding, resolution, pieceStyle)
+          const { canvas, displayW, displayH } = renderPiece(layout, img, COLS, ROWS, pw, ph, padding, resolution, pieceStyle, knobSize)
           rendered.push({ ...layout, canvas, displayW, displayH })
         }
         const done = Math.min(i + CHUNK, total)

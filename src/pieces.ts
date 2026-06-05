@@ -13,29 +13,119 @@ export interface PieceData {
   locked: boolean
 }
 
-// Standard: symmetric bezier tabs centred on each edge
+// Convert a list of anchor points into smooth cubic bezier segments that pass
+// through every anchor (Catmull-Rom). m0 and mEnd set the tangent at the first
+// and last anchor; interior tangents are the average of each anchor's
+// neighbours, scaled by tension.
+function smoothBeziers(
+  pts: [number, number][],
+  m0: [number, number],
+  mEnd: [number, number],
+  tension: number
+) {
+  const n = pts.length
+  const m: [number, number][] = []
+  for (let i = 0; i < n; i++) {
+    if (i === 0) m.push(m0)
+    else if (i === n - 1) m.push(mEnd)
+    else m.push([
+      (pts[i + 1][0] - pts[i - 1][0]) * 0.5 * tension,
+      (pts[i + 1][1] - pts[i - 1][1]) * 0.5 * tension,
+    ])
+  }
+  const segs: number[][] = []
+  for (let i = 0; i < n - 1; i++) {
+    const p0 = pts[i], p1 = pts[i + 1]
+    segs.push([
+      p0[0] + m[i][0] / 3,     p0[1] + m[i][1] / 3,
+      p1[0] - m[i + 1][0] / 3, p1[1] - m[i + 1][1] / 3,
+      p1[0], p1[1],
+    ])
+  }
+  return segs
+}
+
+// Draw one edge from corner A to corner B. If d !== 0 a classic jigsaw tab is
+// added: broad shoulders, a short low waist, and a round bulb that overhangs
+// the waist (the undercut that makes pieces feel like they lock together). The
+// profile is symmetric about the edge midpoint and d only flips the outward
+// direction, so a blank (d = -1) is the exact mirror of a tab (d = +1) and
+// every hole matches the knob that fits it.
+function edgeWithKnob(
+  ctx: CanvasRenderingContext2D,
+  ax: number, ay: number, bx: number, by: number,
+  nx: number, ny: number, // unit outward normal (tab protrusion direction)
+  d: number,
+  u: number               // knob unit = tabSize times the effective scale
+) {
+  if (!d) { ctx.lineTo(bx, by); return }
+
+  const L = Math.hypot(bx - ax, by - ay)
+  const ux = (bx - ax) / L, uy = (by - ay) / L
+  const map = (s: number, o: number): [number, number] => [
+    ax + (L / 2 + s) * ux + d * o * nx,
+    ay + (L / 2 + s) * uy + d * o * ny,
+  ]
+
+  // Tab profile in local units of u: s = along the edge, o = outward.
+  const A: [number, number][] = ([
+    [-0.34, 0.00], // base-left (shoulder)
+    [-0.22, 0.20], // neck waist (pinch)
+    [-0.40, 0.52], // bulb lower-left, widest point, overhangs the waist
+    [ 0.00, 0.78], // bulb top (rounded)
+    [ 0.40, 0.52], // bulb lower-right
+    [ 0.22, 0.20], // neck waist
+    [ 0.34, 0.00], // base-right
+  ] as [number, number][]).map(([s, o]): [number, number] => [s * u, o * u])
+
+  // tangents at the flat-edge ends run along the edge so the knob blends in
+  const segs = smoothBeziers(A, [0.30 * u, 0], [0.30 * u, 0], 1.0)
+
+  const p = map(A[0][0], A[0][1]); ctx.lineTo(p[0], p[1])
+  for (const sg of segs) {
+    const c1 = map(sg[0], sg[1]), c2 = map(sg[2], sg[3]), e = map(sg[4], sg[5])
+    ctx.bezierCurveTo(c1[0], c1[1], c2[0], c2[1], e[0], e[1])
+  }
+  ctx.lineTo(bx, by)
+}
+
+// Knob size is entered as a number where 100 is the standard size. The tab
+// reaches 0.78u outward, so at 128 the knob tip reaches the piece border, the
+// point where it would meet the neighbouring piece. That is the hard ceiling;
+// going higher would clip the knob. The floor just keeps it visible.
+export const KNOB_MIN = 40
+export const KNOB_MAX = 128
+export const KNOB_DEFAULT = 113
+function knobScale(knobSize: number) {
+  const pct = Number.isFinite(knobSize) ? knobSize : 100
+  return Math.min(KNOB_MAX, Math.max(KNOB_MIN, pct)) / 100
+}
+
+// Standard: proper jigsaw knob, a narrow neck leading to a round bulb (drop)
 function drawPathStandard(
   ctx: CanvasRenderingContext2D,
   tabs: [number, number, number, number],
   w: number,
   h: number,
-  t: number
+  t: number,
+  knobSize: number
 ) {
   const [top, right, bottom, left] = tabs
+
+  const u = t * knobScale(knobSize)
+
   ctx.beginPath()
   ctx.moveTo(0, 0)
-  ctx.lineTo(w / 2 - t, 0)
-  ctx.bezierCurveTo(w / 2 - t, -top * t, w / 2 + t, -top * t, w / 2 + t, 0)
-  ctx.lineTo(w, 0)
-  ctx.lineTo(w, h / 2 - t)
-  ctx.bezierCurveTo(w + right * t, h / 2 - t, w + right * t, h / 2 + t, w, h / 2 + t)
-  ctx.lineTo(w, h)
-  ctx.lineTo(w / 2 + t, h)
-  ctx.bezierCurveTo(w / 2 + t, h + bottom * t, w / 2 - t, h + bottom * t, w / 2 - t, h)
-  ctx.lineTo(0, h)
-  ctx.lineTo(0, h / 2 + t)
-  ctx.bezierCurveTo(-left * t, h / 2 + t, -left * t, h / 2 - t, 0, h / 2 - t)
-  ctx.lineTo(0, 0)
+
+  // Top edge: left to right, tab protrudes upward
+  edgeWithKnob(ctx, 0, 0, w, 0, 0, -1, top, u)
+  // Right edge: top to bottom, tab protrudes rightward
+  edgeWithKnob(ctx, w, 0, w, h, 1, 0, right, u)
+  // Bottom edge: right to left, tab protrudes downward
+  edgeWithKnob(ctx, w, h, 0, h, 0, 1, bottom, u)
+  // Left edge: bottom to top, tab protrudes leftward
+  edgeWithKnob(ctx, 0, h, 0, 0, -1, 0, left, u)
+
   ctx.closePath()
 }
 
@@ -71,10 +161,11 @@ function drawPiecePath(
   w: number,
   h: number,
   t: number,
-  style: string
+  style: string,
+  knobSize: number
 ) {
   if (style === 'artsy') return drawPathArtsy(ctx, tabs, w, h, t)
-  return drawPathStandard(ctx, tabs, w, h, t)
+  return drawPathStandard(ctx, tabs, w, h, t, knobSize)
 }
 
 export function calcPieceSize(
@@ -82,7 +173,8 @@ export function calcPieceSize(
   cols: number,
   rows: number,
   stageWidth: number,
-  stageHeight: number
+  stageHeight: number,
+  knobSize = 100
 ): { pw: number; ph: number; padding: number } {
   const aspect = image.width / image.height
   const fraction = 0.40
@@ -96,7 +188,8 @@ export function calcPieceSize(
 
   const pw = Math.max(1, Math.floor(frameW / cols))
   const ph = Math.max(1, Math.floor(frameH / rows))
-  const padding = Math.max(4, Math.round(Math.min(pw, ph) * 0.22))
+  // larger knobs need a bigger canvas border so the tab stays in bounds
+  const padding = Math.max(6, Math.round(Math.min(pw, ph) * 0.28 * Math.max(1, knobScale(knobSize))))
   return { pw, ph, padding }
 }
 
@@ -202,7 +295,8 @@ export function renderPiece(
   ph: number,
   padding: number,
   resolution: number,
-  pieceStyle = 'standard'
+  pieceStyle = 'standard',
+  knobSize = 100
 ): { canvas: HTMLCanvasElement; displayW: number; displayH: number } {
   const tabSize = padding
   const naturalRes = Math.min(image.width / (cols * pw), image.height / (rows * ph))
@@ -218,7 +312,7 @@ export function renderPiece(
 
   ctx.save()
   ctx.translate(padding, padding)
-  drawPiecePath(ctx, piece.tabs, pw, ph, tabSize, pieceStyle)
+  drawPiecePath(ctx, piece.tabs, pw, ph, tabSize, pieceStyle, knobSize)
   ctx.clip()
 
   const sx = (piece.col * image.width)  / cols
@@ -239,7 +333,7 @@ export function renderPiece(
 
   ctx.save()
   ctx.translate(padding, padding)
-  drawPiecePath(ctx, piece.tabs, pw, ph, tabSize, pieceStyle)
+  drawPiecePath(ctx, piece.tabs, pw, ph, tabSize, pieceStyle, knobSize)
   ctx.strokeStyle = 'rgba(0,0,0,0.3)'
   ctx.lineWidth = 1
   ctx.stroke()

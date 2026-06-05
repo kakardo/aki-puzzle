@@ -1,3 +1,5 @@
+import { useState } from 'react'
+import { KNOB_MIN, KNOB_MAX, KNOB_DEFAULT } from './pieces'
 import './SettingsModal.css'
 
 export type PieceStyle = 'standard' | 'artsy'
@@ -7,6 +9,7 @@ export interface Settings {
   resolution: number
   panStep: number
   theme: 'light' | 'dark'
+  knobSize: number
   pieceStyle: PieceStyle
 }
 
@@ -16,6 +19,11 @@ const ZOOM_INC = 0.05
 const PAN_MIN = 20
 const PAN_MAX = 300
 const PAN_INC = 20
+
+const PIECE_STYLES: { value: PieceStyle; label: string }[] = [
+  { value: 'standard', label: 'Standard' },
+  { value: 'artsy',    label: 'Artsy' },
+]
 
 interface Props {
   settings: Settings
@@ -50,13 +58,17 @@ function Stepper({
   )
 }
 
-const PIECE_STYLES: { value: PieceStyle; label: string }[] = [
-  { value: 'standard', label: 'Standard' },
-  { value: 'artsy',    label: 'Artsy' },
-]
-
 export default function SettingsModal({ settings, onChange, onClose }: Props) {
-  const { zoomStep, resolution, panStep, theme, pieceStyle } = settings
+  const { zoomStep, resolution, panStep, theme, knobSize, pieceStyle } = settings
+
+  const [knobInput, setKnobInput] = useState(String(knobSize))
+  const commitKnob = () => {
+    let v = parseInt(knobInput, 10)
+    if (!Number.isFinite(v)) v = knobSize
+    v = Math.min(KNOB_MAX, Math.max(KNOB_MIN, v))
+    setKnobInput(String(v))
+    onChange({ ...settings, knobSize: v })
+  }
 
   return (
     <div className="modal-backdrop" onClick={onClose}>
@@ -69,18 +81,8 @@ export default function SettingsModal({ settings, onChange, onClose }: Props) {
         <div className="setting-row">
           <span className="setting-label">Theme</span>
           <div className="theme-toggle">
-            <button
-              className={`theme-btn${theme === 'light' ? ' active' : ''}`}
-              onClick={() => onChange({ ...settings, theme: 'light' })}
-            >
-              Light
-            </button>
-            <button
-              className={`theme-btn${theme === 'dark' ? ' active' : ''}`}
-              onClick={() => onChange({ ...settings, theme: 'dark' })}
-            >
-              Dark
-            </button>
+            <button className={`theme-btn${theme === 'light' ? ' active' : ''}`} onClick={() => onChange({ ...settings, theme: 'light' })}>Light</button>
+            <button className={`theme-btn${theme === 'dark'  ? ' active' : ''}`} onClick={() => onChange({ ...settings, theme: 'dark'  })}>Dark</button>
           </div>
         </div>
 
@@ -110,6 +112,37 @@ export default function SettingsModal({ settings, onChange, onClose }: Props) {
         })()}
         <p className="setting-hint">Auto matches the image's native pixel density. Applies on next puzzle.</p>
 
+        <Stepper
+          label="WASD distance"
+          display={`${panStep}px`}
+          onDecrement={() => onChange({ ...settings, panStep: Math.max(PAN_MIN, panStep - PAN_INC) })}
+          onIncrement={() => onChange({ ...settings, panStep: Math.min(PAN_MAX, panStep + PAN_INC) })}
+          decrementDisabled={panStep <= PAN_MIN}
+          incrementDisabled={panStep >= PAN_MAX}
+        />
+
+        <div className="setting-divider" />
+
+        <div className="setting-row">
+          <span className="setting-label">Knob size</span>
+          <div className="knob-field">
+            <input
+              className="knob-input"
+              type="number"
+              inputMode="numeric"
+              min={KNOB_MIN}
+              max={KNOB_MAX}
+              placeholder={String(KNOB_DEFAULT)}
+              value={knobInput}
+              onChange={e => setKnobInput(e.target.value)}
+              onBlur={commitKnob}
+              onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+            />
+            <span className="knob-unit">%</span>
+          </div>
+        </div>
+        <p className="setting-hint">100 = standard, default {KNOB_DEFAULT}. Range {KNOB_MIN} to {KNOB_MAX}, where knobs reach the piece edge.</p>
+
         <div className="setting-row">
           <span className="setting-label">Piece style</span>
           <div className="theme-toggle">
@@ -124,16 +157,6 @@ export default function SettingsModal({ settings, onChange, onClose }: Props) {
             ))}
           </div>
         </div>
-        <p className="setting-hint">Applies on next puzzle.</p>
-
-        <Stepper
-          label="WASD distance"
-          display={`${panStep}px`}
-          onDecrement={() => onChange({ ...settings, panStep: Math.max(PAN_MIN, panStep - PAN_INC) })}
-          onIncrement={() => onChange({ ...settings, panStep: Math.min(PAN_MAX, panStep + PAN_INC) })}
-          decrementDisabled={panStep <= PAN_MIN}
-          incrementDisabled={panStep >= PAN_MAX}
-        />
       </div>
     </div>
   )
