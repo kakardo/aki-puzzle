@@ -89,10 +89,33 @@ below, left, right) are treated as strips. Each strip is packed with a regular
 grid of slots sized to one piece plus its padding, so pieces never overlap at
 the start. For very high piece counts the strips grow beyond the visible stage,
 which keeps the spacing even instead of cramming everything into a thin border.
-Every slot also stores its distance from the puzzle area, and the list is sorted
-nearest first. Filling from the front of that sorted list means the ring of
+Every slot also stores its distance from the puzzle area, and each strip is
+sorted nearest first. Filling from the front of that order means the ring of
 pieces closest to the image fills before the outer rows, which is the oval
-look around the frame.
+look around the frame. Because distance also grows toward the corners, each
+individual row fills from its centre outward.
+
+**Keeping opposite rows balanced.** A piece count rarely divides cleanly into
+full rows, so the outermost ring is usually left part filled. Filling the strips
+independently would empty all the pieces into one side first, leaving a full top
+row and a nearly bare bottom one. To avoid that, the top and bottom strips are
+treated as one mirror pair and the left and right strips as another. The strips
+in a pair have the same slot grid, so rank `k` in one lines up with rank `k` in
+its opposite. The fill walks the pair in lockstep, placing both mirrored slots
+together as a single unit ordered by distance. When the pieces run out partway
+through the last ring, each side has taken the same centred count, so opposite
+rows stay symmetric rather than one filling while the other is empty. Only a
+single odd leftover piece can break the pair, and it lands nearest the centre.
+
+**Tidying the outer edge.** Filling by distance still leaves the odd piece
+stranded out past the rest, usually in a corner where the boundary curves away.
+After the units are chosen, a short cleanup pass looks for these strays: a
+filled slot with fewer than two filled neighbours. Each stray is moved inward to
+the nearest empty notch, an open slot that already has two filled neighbours, so
+it plugs a gap in the edge instead of poking out of it. The move is done a whole
+unit at a time, so the mirror symmetry is preserved, and because every move
+trades a far slot for a nearer one the pass cannot loop and settles in a few
+rounds. The result keeps the soft oval but without the lone pieces on its rim.
 
 **Decoupling order from position.** The slot list is fixed and always consumed
 front to back, so the visible pattern never changes. What changes is which piece

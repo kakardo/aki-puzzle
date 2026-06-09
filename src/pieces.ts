@@ -226,11 +226,16 @@ export function generatePieceLayout(
     { x0: puzzleRight + margin, y0: originY - margin,           x1: stageWidth + extraX, y1: puzzleBottom + margin },
   ]
 
-  const slots: { x: number; y: number; dist: number }[] = []
-  for (const strip of strips) {
+  // Build each strip's slots separately so opposite strips can be kept in step.
+  // Strips are ordered top, bottom, left, right, which makes (0,1) a mirror pair
+  // above/below the puzzle and (2,3) a mirror pair to its left/right. Each slot
+  // keeps its strip and grid cell so the outer edge can be tidied later.
+  type Slot = { x: number; y: number; dist: number; strip: number; r: number; c: number }
+  const stripSlots: Slot[][] = strips.map(() => [])
+  strips.forEach((strip, si) => {
     const stripW = strip.x1 - strip.x0
     const stripH = strip.y1 - strip.y0
-    if (stripW < slotW || stripH < slotH) continue
+    if (stripW < slotW || stripH < slotH) return
     const nCols = Math.floor(stripW / slotW)
     const nRows = Math.floor(stripH / slotH)
     const offX = strip.x0 + (stripW - nCols * slotW) / 2
@@ -243,11 +248,90 @@ export function generatePieceLayout(
         const sy = y + slotH / 2
         const dx = Math.max(0, Math.max(originX - sx, sx - puzzleRight))
         const dy = Math.max(0, Math.max(originY - sy, sy - puzzleBottom))
-        slots.push({ x, y, dist: Math.sqrt(dx * dx + dy * dy) })
+        stripSlots[si].push({ x, y, dist: Math.sqrt(dx * dx + dy * dy), strip: si, r, c })
       }
     }
+  })
+
+  // Order each strip nearest first; since distance grows toward the corners,
+  // this also fills every row from its centre outward.
+  for (const s of stripSlots) s.sort((a, b) => a.dist - b.dist)
+
+  // Walk the two mirror pairs in lockstep. Rank k in one strip lines up with
+  // rank k in its opposite, so a unit holds both mirrored slots and they are
+  // always placed together. That keeps opposite rows symmetric when the pieces
+  // run out partway through the outermost ring.
+  type Unit = { dist: number; slots: Slot[] }
+  const units: Unit[] = []
+  const pairs = [[0, 1], [2, 3]]
+  for (const [a, b] of pairs) {
+    const A = stripSlots[a]
+    const B = stripSlots[b]
+    const ranks = Math.max(A.length, B.length)
+    for (let k = 0; k < ranks; k++) {
+      const pair: Slot[] = []
+      if (A[k]) pair.push(A[k])
+      if (B[k]) pair.push(B[k])
+      if (pair.length) units.push({ dist: pair[0].dist, slots: pair })
+    }
   }
-  slots.sort((a, b) => a.dist - b.dist)
+  // Nearest unit first keeps the overall oval.
+  units.sort((a, b) => a.dist - b.dist)
+
+  // The nearest units are the ones that will actually hold pieces.
+  const used = new Set<Unit>()
+  let filled = 0
+  for (const u of units) {
+    if (filled >= needed) break
+    used.add(u)
+    filled += u.slots.length
+  }
+
+  // Tidy the outer edge so no single piece is left stranded past it. A filled
+  // unit with fewer than two filled neighbours is a stray; it moves inward to
+  // the nearest empty notch, an open slot that already has two filled
+  // neighbours. Whole units move together, so the mirror symmetry holds, and
+  // every swap trades a far slot for a nearer one, so the passes always settle.
+  const byCell = new Map<string, Unit>()
+  for (const u of units) {
+    const s = u.slots[0]
+    byCell.set(`${s.strip}:${s.r}:${s.c}`, u)
+  }
+  const filledNeighbours = (u: Unit) => {
+    const s = u.slots[0]
+    let n = 0
+    for (const [dr, dc] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const v = byCell.get(`${s.strip}:${s.r + dr}:${s.c + dc}`)
+      if (v && used.has(v)) n++
+    }
+    return n
+  }
+  for (let pass = 0; pass < 6; pass++) {
+    const strays = [...used]
+      .filter(u => u.slots.length === 2 && filledNeighbours(u) < 2)
+      .sort((a, b) => b.dist - a.dist)
+    const notches = units
+      .filter(u => u.slots.length === 2 && !used.has(u) && filledNeighbours(u) >= 2)
+      .sort((a, b) => a.dist - b.dist)
+    let changed = false
+    let ni = 0
+    for (const stray of strays) {
+      while (ni < notches.length && used.has(notches[ni])) ni++
+      if (ni < notches.length && notches[ni].dist < stray.dist) {
+        used.delete(stray)
+        used.add(notches[ni])
+        ni++
+        changed = true
+      }
+    }
+    if (!changed) break
+  }
+
+  // Filled units first (nearest first), then the rest, so the pieces land on the
+  // tidied set and any odd spare falls just inside it rather than out at a tip.
+  const slots: { x: number; y: number }[] = []
+  for (const u of units) if (used.has(u)) for (const s of u.slots) slots.push({ x: s.x, y: s.y })
+  for (const u of units) if (!used.has(u)) for (const s of u.slots) slots.push({ x: s.x, y: s.y })
 
   const tabGrid: number[][][] = []
   for (let r = 0; r <= rows; r++) {
