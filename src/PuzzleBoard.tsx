@@ -3,6 +3,7 @@ import { Stage, Layer, Image as KonvaImage, Rect } from 'react-konva'
 import type KonvaType from 'konva'
 import type { KonvaEventObject } from 'konva/lib/Node'
 import { generatePieceLayout, renderPiece, calcPieceSize, type PieceData } from './pieces'
+import type { ProgressMode } from './SettingsModal'
 import Fireworks from './Fireworks'
 
 interface Props {
@@ -15,6 +16,8 @@ interface Props {
   knobSize: number
   pieceStyle: string
   pieceSpacing: number
+  progressMode: ProgressMode
+  progressPercent: boolean
   theme: 'light' | 'dark'
   accentColor: string
   onReset: () => void
@@ -25,7 +28,16 @@ interface Props {
 
 const SNAP_THRESHOLD = 30
 
-export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep, resolution, panStep, knobSize, pieceStyle, pieceSpacing, theme, accentColor, onReset, onOpenSettings, onToggleTheme, onPieceMoved }: Props) {
+function formatProgress(locked: number, total: number, mode: ProgressMode, showPct: boolean): string {
+  if (mode === 'off' || total === 0) return ''
+  const pct = Math.round((locked / total) * 100)
+  if (mode === 'percent') return `${pct}%`
+  const pctStr = showPct ? ` (${pct}%)` : ''
+  if (mode === 'count') return `${locked}${pctStr}`
+  return `${locked}/${total}${pctStr}`
+}
+
+export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep, resolution, panStep, knobSize, pieceStyle, pieceSpacing, progressMode, progressPercent, theme, accentColor, onReset, onOpenSettings, onToggleTheme, onPieceMoved }: Props) {
   const [pieces, setPieces] = useState<PieceData[]>([])
   const [groups, setGroups] = useState<Record<string, string>>({})
   const [solved, setSolved] = useState(false)
@@ -341,6 +353,10 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
   const originX = layoutOrigin.x
   const originY = layoutOrigin.y
 
+  const lockedCount = pieces.filter(p => p.locked).length
+  const totalCount = pieces.length
+  const progressText = formatProgress(lockedCount, totalCount, progressMode, progressPercent)
+
   function fitAll(allPieces: PieceData[], ps = pieceSizeRef.current) {
     if (allPieces.length === 0) return
     // Read the live viewport and origin so this works even from the keyboard
@@ -450,16 +466,25 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
           <span className="hamburger-line" />
           <span className="hamburger-line" />
         </button>
+        {progressText && !menuOpen && (
+          <div className="progress-counter">{progressText}</div>
+        )}
 
         {menuOpen && (
           <>
             <div className="puzzle-menu-backdrop" onClick={() => setMenuOpen(false)} />
             <div className="puzzle-dropdown">
-              <button className="dropdown-item" onClick={() => { resetToInitialFit(); setMenuOpen(false) }}>
-                Reset zoom
+              {progressText && (
+                <>
+                  <div className="dropdown-progress">{progressText}</div>
+                  <div className="dropdown-divider" />
+                </>
+              )}
+              <button className="dropdown-item dropdown-item--keyed" onClick={() => { resetToInitialFit(); setMenuOpen(false) }}>
+                <span>Reset zoom</span><kbd>R</kbd>
               </button>
-              <button className="dropdown-item" onClick={() => { setShowPreview(v => !v); setMenuOpen(false) }}>
-                {showPreview ? 'Hide preview' : 'Show preview'}
+              <button className="dropdown-item dropdown-item--keyed" onClick={() => { setShowPreview(v => !v); setMenuOpen(false) }}>
+                <span>{showPreview ? 'Hide preview' : 'Show preview'}</span><kbd>Tab</kbd>
               </button>
               <button className="dropdown-item" onClick={() => { onOpenSettings(); setMenuOpen(false) }}>
                 Settings

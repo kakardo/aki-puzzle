@@ -4,6 +4,8 @@ import './SettingsModal.css'
 
 export type PieceStyle = 'standard' | 'artsy'
 
+export type ProgressMode = 'off' | 'percent' | 'count' | 'count-total'
+
 export interface Settings {
   zoomStep: number
   resolution: number
@@ -12,6 +14,8 @@ export interface Settings {
   knobSize: number
   pieceStyle: PieceStyle
   pieceSpacing: number
+  progressMode: ProgressMode
+  progressPercent: boolean
 }
 
 const SPACING_MIN = 0
@@ -64,8 +68,15 @@ function Stepper({
   )
 }
 
+const PROGRESS_MODES: { value: ProgressMode; label: string }[] = [
+  { value: 'off',         label: 'Off' },
+  { value: 'percent',     label: '%' },
+  { value: 'count',       label: 'Count' },
+  { value: 'count-total', label: 'Count+Total' },
+]
+
 export default function SettingsModal({ settings, onChange, onClose, puzzleHasProgress }: Props) {
-  const { zoomStep, resolution, panStep, theme, knobSize, pieceStyle, pieceSpacing } = settings
+  const { zoomStep, resolution, panStep, theme, knobSize, pieceStyle, pieceSpacing, progressMode, progressPercent } = settings
 
   const [knobInput, setKnobInput] = useState(String(knobSize))
   const [pendingSpacing, setPendingSpacing] = useState<number | null>(null)
@@ -191,6 +202,33 @@ export default function SettingsModal({ settings, onChange, onClose, puzzleHasPr
           </div>
         ) : (
           <p className="setting-hint">Gap between scattered pieces.</p>
+        )}
+
+        <div className="setting-divider" />
+
+        <div className="setting-row">
+          <span className="setting-label">Progress</span>
+          <div className="theme-toggle">
+            {PROGRESS_MODES.map(m => (
+              <button
+                key={m.value}
+                className={`theme-btn${progressMode === m.value ? ' active' : ''}`}
+                onClick={() => onChange({ ...settings, progressMode: m.value })}
+              >
+                {m.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {(progressMode === 'count' || progressMode === 'count-total') && (
+          <div className="setting-row">
+            <span className="setting-label">Show %</span>
+            <div className="theme-toggle">
+              <button className={`theme-btn${progressPercent ? ' active' : ''}`} onClick={() => onChange({ ...settings, progressPercent: true })}>On</button>
+              <button className={`theme-btn${!progressPercent ? ' active' : ''}`} onClick={() => onChange({ ...settings, progressPercent: false })}>Off</button>
+            </div>
+          </div>
         )}
       </div>
     </div>

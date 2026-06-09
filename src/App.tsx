@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import PuzzleBoard from './PuzzleBoard'
-import SettingsModal, { type Settings } from './SettingsModal'
+import SettingsModal, { type Settings, type ProgressMode } from './SettingsModal'
 import { KNOB_DEFAULT } from './pieces'
 import './App.css'
 
@@ -10,7 +10,9 @@ function calcGrid(count: number, aspect: number): { cols: number; rows: number }
   return { cols, rows }
 }
 
-const DEFAULT_SETTINGS: Settings = { zoomStep: 1.25, resolution: 99, panStep: 80, theme: 'light', knobSize: KNOB_DEFAULT, pieceStyle: 'standard', pieceSpacing: 8 }
+const VALID_PROGRESS_MODES: ProgressMode[] = ['off', 'percent', 'count', 'count-total']
+
+const DEFAULT_SETTINGS: Settings = { zoomStep: 1.25, resolution: 99, panStep: 80, theme: 'light', knobSize: KNOB_DEFAULT, pieceStyle: 'standard', pieceSpacing: 8, progressMode: 'count-total', progressPercent: false }
 
 const VALID_PIECE_STYLES = ['standard', 'artsy']
 
@@ -22,6 +24,8 @@ function loadSettings(): Settings {
       if (!VALID_PIECE_STYLES.includes(parsed.pieceStyle)) parsed.pieceStyle = 'standard'
       if (typeof parsed.knobSize !== 'number' || !Number.isFinite(parsed.knobSize)) parsed.knobSize = KNOB_DEFAULT
       if (typeof parsed.pieceSpacing !== 'number' || !Number.isFinite(parsed.pieceSpacing)) parsed.pieceSpacing = 8
+      if (!VALID_PROGRESS_MODES.includes(parsed.progressMode)) parsed.progressMode = 'count-total'
+      if (typeof parsed.progressPercent !== 'boolean') parsed.progressPercent = false
       return { ...DEFAULT_SETTINGS, ...parsed }
     }
   } catch {}
@@ -121,6 +125,8 @@ export default function App() {
           knobSize={settings.knobSize}
           pieceStyle={settings.pieceStyle}
           pieceSpacing={settings.pieceSpacing}
+          progressMode={settings.progressMode}
+          progressPercent={settings.progressPercent}
           theme={settings.theme}
           accentColor={accentColor}
           onReset={() => setGrid(null)}
