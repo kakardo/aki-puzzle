@@ -95,27 +95,37 @@ pieces closest to the image fills before the outer rows, which is the oval
 look around the frame. Because distance also grows toward the corners, each
 individual row fills from its centre outward.
 
-**Keeping opposite rows balanced.** A piece count rarely divides cleanly into
-full rows, so the outermost ring is usually left part filled. Filling the strips
+**Keeping the scatter balanced.** A piece count rarely divides cleanly into full
+rows, so the outermost ring is usually left part filled. Filling the strips
 independently would empty all the pieces into one side first, leaving a full top
-row and a nearly bare bottom one. To avoid that, the top and bottom strips are
-treated as one mirror pair and the left and right strips as another. The strips
-in a pair have the same slot grid, so rank `k` in one lines up with rank `k` in
-its opposite. The fill walks the pair in lockstep, placing both mirrored slots
-together as a single unit ordered by distance. When the pieces run out partway
-through the last ring, each side has taken the same centred count, so opposite
-rows stay symmetric rather than one filling while the other is empty. Only a
-single odd leftover piece can break the pair, and it lands nearest the centre.
+row and a nearly bare bottom one. To avoid that, every slot is paired with its
+180 degree rotation about the puzzle centre, so the layout is point symmetric:
+the top pairs with the bottom flipped left to right, and the left pairs with the
+right flipped top to bottom. A unit holds both partners and they are always
+placed together as one, ordered by distance. The fill stops before it would
+overshoot into a half filled pair, so the chosen set is always fully symmetric.
+When the pieces run out partway through the last ring, any spill is balanced
+across the centre: a nub on the top-left is matched bottom-right, and a spill on
+one side is matched on the far side, flipped top to bottom.
 
-**Tidying the outer edge.** Filling by distance still leaves the odd piece
-stranded out past the rest, usually in a corner where the boundary curves away.
-After the units are chosen, a short cleanup pass looks for these strays: a
-filled slot with fewer than two filled neighbours. Each stray is moved inward to
-the nearest empty notch, an open slot that already has two filled neighbours, so
-it plugs a gap in the edge instead of poking out of it. The move is done a whole
-unit at a time, so the mirror symmetry is preserved, and because every move
-trades a far slot for a nearer one the pass cannot loop and settles in a few
-rounds. The result keeps the soft oval but without the lone pieces on its rim.
+**Tidying the outer edge.** Filling by distance still leaves pieces stranded out
+past the rest. After the units are chosen, a short cleanup pass looks for two
+kinds of stray: a filled slot with fewer than two filled neighbours, counted
+across all strips, which is a lone tip; and a slot on the outer front of a run
+that is far shorter than the line just inside it, which is a nub sitting on top
+of a full row. The second test is relative, comparing a run to its inner
+neighbour, so a sharp two or three piece nub is caught while a gradual oval taper
+is left alone. Each stray is moved inward to the nearest empty notch, an open
+slot that already has two filled neighbours, so it plugs a gap in the edge
+instead of poking out of it. The move is done a whole unit at a time, so the
+point symmetry is preserved, and because every move trades a far slot for a
+nearer one the pass cannot loop and settles in a few rounds.
+
+**The odd piece.** When the piece count is odd, one slot has no rotation partner.
+Rather than let it sit alone against a flat edge, it is dropped onto the open
+slot that touches the most filled neighbours, breaking ties toward the nearest,
+so it tucks into the end of a row. The result keeps the soft oval without lone
+pieces on its rim.
 
 **Decoupling order from position.** The slot list is fixed and always consumed
 front to back, so the visible pattern never changes. What changes is which piece
