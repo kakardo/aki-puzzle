@@ -31,6 +31,15 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
   const [fireworksReturning, setFireworksReturning] = useState(false)
   const [size, setSize] = useState({ width: window.innerWidth, height: window.innerHeight })
   const [pieceSize, setPieceSize] = useState({ pw: 120, ph: 120, padding: 20 })
+  // Where the assembled puzzle sits, fixed in world space when the layout is
+  // generated. Anchoring it here means resizing the window only moves the
+  // viewport, so the frame and the pieces never drift apart.
+  const [layoutOrigin, setLayoutOrigin] = useState({ x: 0, y: 0 })
+  const layoutOriginRef = useRef(layoutOrigin)
+  useEffect(() => { layoutOriginRef.current = layoutOrigin }, [layoutOrigin])
+  // The window size at the moment the layout was generated. Piece sizing stays
+  // tied to this, so later window resizes do not reshape the existing puzzle.
+  const genSizeRef = useRef({ width: window.innerWidth, height: window.innerHeight })
   const [zoom, setZoom] = useState(1)
   const [pan, setPan] = useState({ x: 0, y: 0 })
   const [loadingSteps, setLoadingSteps] = useState<{ label: string; done: boolean; detail?: string }[]>([])
@@ -41,7 +50,6 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
   const lastPos = useRef<{ x: number; y: number } | null>(null)
   const isPanning = useRef(false)
   const panAnchor = useRef({ x: 0, y: 0 })
-  const initialFit = useRef<{ zoom: number; pan: { x: number; y: number } } | null>(null)
   const sourceImageRef = useRef<HTMLImageElement | null>(null)
   const layoutRef = useRef<Omit<PieceData, 'canvas' | 'displayW' | 'displayH'>[]>([])
   const pieceSizeRef = useRef({ pw: 120, ph: 120, padding: 20 })
@@ -61,8 +69,9 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
     const img = sourceImageRef.current
     const layouts = layoutRef.current
     if (!img || layouts.length === 0) return
-    // Recalculate padding since it depends on knobSize
-    const ps = calcPieceSize(img, COLS, ROWS, size.width, size.height, knobSize)
+    // Recalculate padding since it depends on knobSize. Use the generation-time
+    // size so the existing layout keeps its proportions.
+    const ps = calcPieceSize(img, COLS, ROWS, genSizeRef.current.width, genSizeRef.current.height, knobSize)
     pieceSizeRef.current = ps
     setPieceSize(ps)
     const { pw, ph, padding } = ps
@@ -82,7 +91,6 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
       setSolved(false)
       setZoom(1)
       setPan({ x: 0, y: 0 })
-      initialFit.current = null
       setPieces([])
 
       const total = COLS * ROWS
@@ -99,6 +107,11 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
       const ps = calcPieceSize(img, COLS, ROWS, size.width, size.height, knobSize)
       setPieceSize(ps)
       pieceSizeRef.current = ps
+      genSizeRef.current = { width: size.width, height: size.height }
+      setLayoutOrigin({
+        x: (size.width - COLS * ps.pw) / 2,
+        y: (size.height - ROWS * ps.ph) / 2,
+      })
       const { pieces: layouts, pw, ph, padding } = generatePieceLayout(img, COLS, ROWS, size.width, size.height, knobSize)
       layoutRef.current = layouts
 
@@ -190,11 +203,9 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
 
   function correctPos(col: number, row: number) {
     const { pw, ph } = pieceSize
-    const originX = (size.width - COLS * pw) / 2
-    const originY = (size.height - ROWS * ph) / 2
     return {
-      cx: originX + col * pw - pieceSize.padding,
-      cy: originY + row * ph - pieceSize.padding,
+      cx: layoutOrigin.x + col * pw - pieceSize.padding,
+      cy: layoutOrigin.y + row * ph - pieceSize.padding,
     }
   }
 
@@ -309,15 +320,19 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
     })
   }
 
-  const originX = (size.width - COLS * pieceSize.pw) / 2
-  const originY = (size.height - ROWS * pieceSize.ph) / 2
+  const originX = layoutOrigin.x
+  const originY = layoutOrigin.y
 
-  function fitAll(allPieces: PieceData[], ps = pieceSize) {
+  function fitAll(allPieces: PieceData[], ps = pieceSizeRef.current) {
     if (allPieces.length === 0) return
+    // Read the live viewport and origin so this works even from the keyboard
+    // handler, which is bound once and would otherwise see stale values.
+    const vw = window.innerWidth
+    const vh = window.innerHeight
     const fw = COLS * ps.pw
     const fh = ROWS * ps.ph
-    const ox = (size.width - fw) / 2
-    const oy = (size.height - fh) / 2
+    const ox = layoutOriginRef.current.x
+    const oy = layoutOriginRef.current.y
 
     let minX = ox, minY = oy, maxX = ox + fw, maxY = oy + fh
     for (const p of allPieces) {
@@ -329,28 +344,24 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
 
     const pad = 40
     const fitZoom = Math.min(
-      (size.width - pad * 2) / (maxX - minX),
-      (size.height - pad * 2) / (maxY - minY),
+      (vw - pad * 2) / (maxX - minX),
+      (vh - pad * 2) / (maxY - minY),
       1
     )
     const fitPan = {
-      x: (size.width - (maxX - minX) * fitZoom) / 2 - minX * fitZoom,
-      y: (size.height - (maxY - minY) * fitZoom) / 2 - minY * fitZoom,
+      x: (vw - (maxX - minX) * fitZoom) / 2 - minX * fitZoom,
+      y: (vh - (maxY - minY) * fitZoom) / 2 - minY * fitZoom,
     }
     setZoom(fitZoom)
     setPan(fitPan)
     zoomRef.current = fitZoom
     panRef.current = fitPan
-    if (!initialFit.current) initialFit.current = { zoom: fitZoom, pan: fitPan }
   }
 
   function resetToInitialFit() {
-    const f = initialFit.current
-    if (!f) return
-    setZoom(f.zoom)
-    setPan(f.pan)
-    zoomRef.current = f.zoom
-    panRef.current = f.pan
+    // Recompute the fit against the current window so the board lands centred
+    // whatever the window size is now, not the size it had when generated.
+    fitAll(piecesRef.current)
   }
 
   function handleWheel(e: KonvaEventObject<WheelEvent>) {
