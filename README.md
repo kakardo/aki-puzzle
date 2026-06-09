@@ -17,6 +17,7 @@ Open `http://localhost:5173`.
 2. Set how many pieces you want, then click **Start puzzling**.
 3. Zoom in to work on the puzzle. Pieces snap together when you get them close enough.
 4. Pieces that connect lock into a group and move together from that point on.
+5. Press `Tab` or use the menu to toggle a full-screen preview of the reference image.
 
 Your image and settings are saved between sessions.
 
@@ -31,6 +32,7 @@ Your image and settings are saved between sessions.
 | `E` | Zoom in |
 | `R` | Reset zoom |
 | `W` `A` `S` `D` | Pan |
+| `Tab` | Toggle image preview |
 
 ## Settings
 
@@ -43,10 +45,17 @@ Open the menu (top left) and choose **Settings**.
 | WASD distance | 20 px to 300 px | 80 px |
 | Knob size | 40 to 128 | 116 |
 | Piece style | Standard, Artsy | Standard |
+| Piece spacing | 0 px to 32 px | 8 px |
+| Progress | Off, %, Count, Count+Total | Count+Total |
+| Show % | On, Off | Off |
 
 Auto quality matches the image's native pixel density and is the right choice for most images. Lower settings speed up generation for very high piece counts.
 
 Knob size is typed in as a number. The maximum of 128 is the point where the knobs reach the edge of the piece, so anything larger would be clipped. Changing it re-cuts the pieces straight away.
+
+Piece spacing controls the gap between scattered pieces at the start of a puzzle. Changing it mid-puzzle reshuffles unlocked pieces; a confirmation appears if any piece has already been moved.
+
+The progress counter is shown below the menu button and in the open menu. Count+Total displays the number of locked pieces and the total, e.g. `85/500`. Show % adds the percentage in parentheses, e.g. `85/500 (17%)`.
 
 ## Piece counts
 

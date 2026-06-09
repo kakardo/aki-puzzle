@@ -4,7 +4,7 @@ import type KonvaType from 'konva'
 import type { KonvaEventObject } from 'konva/lib/Node'
 import { generatePieceLayout, renderPiece, calcPieceSize, type PieceData } from './pieces'
 import type { ProgressMode } from './SettingsModal'
-import Fireworks from './Fireworks'
+import Fireworks from './animations/Fireworks'
 
 interface Props {
   imageSrc: string
