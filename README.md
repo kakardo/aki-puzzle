@@ -78,6 +78,39 @@ what makes pieces feel like they lock rather than just touch. The points are
 joined with a Catmull-Rom spline (`smoothBeziers`), which runs a smooth line
 through all of them and flattens out where the tab meets the straight edge.
 
+## How the pieces are placed and shuffled
+
+Once the shapes are known, `generatePieceLayout` decides where each piece starts
+on the table. This happens in two independent steps: building the set of resting
+spots, and deciding which piece goes in each one.
+
+**Building the slots.** The four rectangles around the assembled image (above,
+below, left, right) are treated as strips. Each strip is packed with a regular
+grid of slots sized to one piece plus its padding, so pieces never overlap at
+the start. For very high piece counts the strips grow beyond the visible stage,
+which keeps the spacing even instead of cramming everything into a thin border.
+Every slot also stores its distance from the puzzle area, and the list is sorted
+nearest first. Filling from the front of that sorted list means the ring of
+pieces closest to the image fills before the outer rows, which is the oval
+look around the frame.
+
+**Decoupling order from position.** The slot list is fixed and always consumed
+front to back, so the visible pattern never changes. What changes is which piece
+lands in each slot. The pieces are built in grid order (row by row, column by
+column), then an index array is shuffled with a Fisher-Yates shuffle before any
+slot is assigned. Fisher-Yates walks the array from the end, swapping each entry
+with a randomly chosen earlier one, which produces a uniform permutation in a
+single linear pass with no bias toward any starting arrangement.
+
+**Breaking the neighbour correlation.** The earlier version assigned slots in grid order, so piece
+`(0,0)` took the nearest slot, `(1,0)` the next nearest, and so on. Because
+adjacent slots in the sorted list sit physically close, grid neighbours kept
+landing next to each other and the scatter looked only half mixed. Shuffling the
+assignment breaks the correlation between a piece's place in the image and its
+place on the table, so neighbouring pieces are spread across the whole layout
+while the slot pattern itself stays identical. Any leftover pieces beyond the
+last slot fall back to a random point on the stage.
+
 ## Tech stack
 
 - React + TypeScript + Vite

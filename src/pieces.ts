@@ -257,7 +257,6 @@ export function generatePieceLayout(
     }
   }
 
-  let slotIndex = 0
   const pieces: Omit<PieceData, 'imageDataUrl' | 'displayW' | 'displayH'>[] = []
 
   for (let row = 0; row < rows; row++) {
@@ -271,15 +270,26 @@ export function generatePieceLayout(
       const correctX = (stageWidth - cols * pw) / 2 + col * pw - padding
       const correctY = (stageHeight - rows * ph) / 2 + row * ph - padding
 
-      let x: number, y: number
-      if (slotIndex < slots.length) {
-        x = slots[slotIndex].x; y = slots[slotIndex].y; slotIndex++
-      } else {
-        x = Math.random() * (stageWidth - pw - padding * 2)
-        y = Math.random() * (stageHeight - ph - padding * 2)
-      }
+      pieces.push({ id: `${col}-${row}`, col, row, x: 0, y: 0, correctX, correctY, tabs, locked: false })
+    }
+  }
 
-      pieces.push({ id: `${col}-${row}`, col, row, x, y, correctX, correctY, tabs, locked: false })
+  // Assign pieces to slots in a shuffled order so grid neighbours do not end up
+  // in neighbouring slots. The slot pattern itself is unchanged: the same slots
+  // get filled, only which piece lands in each one is randomised.
+  const order = pieces.map((_, i) => i)
+  for (let i = order.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[order[i], order[j]] = [order[j], order[i]]
+  }
+
+  for (let k = 0; k < order.length; k++) {
+    const piece = pieces[order[k]]
+    if (k < slots.length) {
+      piece.x = slots[k].x; piece.y = slots[k].y
+    } else {
+      piece.x = Math.random() * (stageWidth - pw - padding * 2)
+      piece.y = Math.random() * (stageHeight - ph - padding * 2)
     }
   }
 
