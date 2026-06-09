@@ -3,7 +3,9 @@ import { Stage, Layer, Image as KonvaImage, Rect } from 'react-konva'
 import type KonvaType from 'konva'
 import type { KonvaEventObject } from 'konva/lib/Node'
 import { generatePieceLayout, renderPiece, calcPieceSize, type PieceData } from './pieces'
-import type { ProgressMode } from './SettingsModal'
+import type { ProgressMode, EdgeStyle } from './SettingsModal'
+import DebugOverlay from './debug/DebugOverlay'
+import { useDebugSolve } from './debug/useDebugSolve'
 import Fireworks from './animations/Fireworks'
 
 interface Props {
@@ -16,6 +18,8 @@ interface Props {
   knobSize: number
   pieceStyle: string
   pieceSpacing: number
+  edgeStyle: EdgeStyle
+  showBorder: boolean
   progressMode: ProgressMode
   progressPercent: boolean
   theme: 'light' | 'dark'
@@ -37,7 +41,7 @@ function formatProgress(locked: number, total: number, mode: ProgressMode, showP
   return `${locked}/${total}${pctStr}`
 }
 
-export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep, resolution, panStep, knobSize, pieceStyle, pieceSpacing, progressMode, progressPercent, theme, accentColor, onReset, onOpenSettings, onToggleTheme, onPieceMoved }: Props) {
+export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep, resolution, panStep, knobSize, pieceStyle, pieceSpacing, edgeStyle, showBorder, progressMode, progressPercent, theme, accentColor, onReset, onOpenSettings, onToggleTheme, onPieceMoved }: Props) {
   const [pieces, setPieces] = useState<PieceData[]>([])
   const [groups, setGroups] = useState<Record<string, string>>({})
   const [solved, setSolved] = useState(false)
@@ -106,10 +110,10 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
     setPieces(prev => prev.map(p => {
       const layout = layouts.find(l => l.id === p.id)
       if (!layout) return p
-      const { canvas, displayW, displayH } = renderPiece(layout, img, COLS, ROWS, pw, ph, padding, resolution, pieceStyle, knobSize)
+      const { canvas, displayW, displayH } = renderPiece(layout, img, COLS, ROWS, pw, ph, padding, resolution, pieceStyle, knobSize, edgeStyle, showBorder)
       return { ...p, canvas, displayW, displayH }
     }))
-  }, [knobSize, pieceStyle])
+  }, [knobSize, pieceStyle, edgeStyle, showBorder])
 
   useEffect(() => {
     const img = new window.Image()
@@ -156,7 +160,7 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
 
       for (let i = 0; i < layouts.length; i += CHUNK) {
         for (const layout of layouts.slice(i, i + CHUNK)) {
-          const { canvas, displayW, displayH } = renderPiece(layout, img, COLS, ROWS, pw, ph, padding, resolution, pieceStyle, knobSize)
+          const { canvas, displayW, displayH } = renderPiece(layout, img, COLS, ROWS, pw, ph, padding, resolution, pieceStyle, knobSize, edgeStyle, showBorder)
           rendered.push({ ...layout, canvas, displayW, displayH })
         }
         const done = Math.min(i + CHUNK, total)
@@ -191,7 +195,7 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
       if (e.key === 'Tab') { e.preventDefault(); if (!e.repeat) setShowPreview(v => !v); return }
       const key = e.key.toLowerCase()
       if (key === 'e') {
-        const newZoom = Math.min(zoomRef.current * zoomStep, 8)
+        const newZoom = Math.min(zoomRef.current * zoomStep, 16)
         const cx = window.innerWidth / 2
         const cy = window.innerHeight / 2
         const mouseX = (cx - panRef.current.x) / zoomRef.current
@@ -223,6 +227,8 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
   }, [])
+
+  useDebugSolve(setPieces, pieceSizeRef, layoutOriginRef, nodeRefs)
 
   function getGroupIds(id: string, currentGroups: Record<string, string>, currentPieces: PieceData[]) {
     const groupId = currentGroups[id]
@@ -357,6 +363,15 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
   const totalCount = pieces.length
   const progressText = formatProgress(lockedCount, totalCount, progressMode, progressPercent)
 
+  const actualCanvasRes = (() => {
+    const img = sourceImageRef.current
+    const { pw, ph } = pieceSizeRef.current
+    if (!img || pw === 0 || ph === 0) return 0
+    const dpr = window.devicePixelRatio || 1
+    const naturalRes = Math.min(img.width / (COLS * pw), img.height / (ROWS * ph))
+    return resolution === 99 ? Math.max(1, naturalRes) : Math.max(1, resolution * dpr)
+  })()
+
   function fitAll(allPieces: PieceData[], ps = pieceSizeRef.current) {
     if (allPieces.length === 0) return
     // Read the live viewport and origin so this works even from the keyboard
@@ -405,7 +420,7 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
     const pointer = stage.getPointerPosition()
     if (!pointer) return
     const factor = e.evt.deltaY < 0 ? zoomStep : 1 / zoomStep
-    const newZoom = Math.min(Math.max(zoomRef.current * factor, 0.25), 8)
+    const newZoom = Math.min(Math.max(zoomRef.current * factor, 0.25), 16)
     const mouseX = (pointer.x - panRef.current.x) / zoomRef.current
     const mouseY = (pointer.y - panRef.current.y) / zoomRef.current
     const newPan = { x: pointer.x - mouseX * newZoom, y: pointer.y - mouseY * newZoom }
@@ -557,6 +572,16 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
           onClick={e => e.stopPropagation()}
         />
       </div>
+
+      {import.meta.env.DEV && !showPreview && (
+        <DebugOverlay
+          zoom={zoom}
+          resolution={resolution}
+          actualCanvasRes={actualCanvasRes}
+          pieceCount={pieces.length}
+          lockedCount={lockedCount}
+        />
+      )}
 
       <Stage
         ref={stageRef}

@@ -41,7 +41,7 @@ Open the menu (top left) and choose **Settings**.
 | Setting | Options | Default |
 |---|---|---|
 | Zoom step | 1.05x to 2.00x | 1.25x |
-| Piece quality | Normal (1x), Sharp (2x), Auto | Auto |
+| Piece quality | 1x, 2x, 4x, Auto | 4x |
 | WASD distance | 20 px to 300 px | 80 px |
 | Knob size | 40 to 128 | 116 |
 | Piece style | Standard, Artsy | Standard |

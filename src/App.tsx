@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import PuzzleBoard from './PuzzleBoard'
-import SettingsModal, { type Settings, type ProgressMode } from './SettingsModal'
+import SettingsModal, { type Settings, type ProgressMode, type EdgeStyle } from './SettingsModal'
 import { KNOB_DEFAULT } from './pieces'
 import './App.css'
 
@@ -11,8 +11,9 @@ function calcGrid(count: number, aspect: number): { cols: number; rows: number }
 }
 
 const VALID_PROGRESS_MODES: ProgressMode[] = ['off', 'percent', 'count', 'count-total']
+const VALID_EDGE_STYLES: EdgeStyle[] = ['straight', 'waves']
 
-const DEFAULT_SETTINGS: Settings = { zoomStep: 1.25, resolution: 99, panStep: 80, theme: 'light', knobSize: KNOB_DEFAULT, pieceStyle: 'standard', pieceSpacing: 8, progressMode: 'count-total', progressPercent: false }
+const DEFAULT_SETTINGS: Settings = { zoomStep: 1.25, resolution: 4, panStep: 80, theme: 'light', knobSize: KNOB_DEFAULT, pieceStyle: 'standard', pieceSpacing: 8, edgeStyle: 'straight', showBorder: true, progressMode: 'count-total', progressPercent: false }
 
 const VALID_PIECE_STYLES = ['standard', 'artsy']
 
@@ -24,6 +25,8 @@ function loadSettings(): Settings {
       if (!VALID_PIECE_STYLES.includes(parsed.pieceStyle)) parsed.pieceStyle = 'standard'
       if (typeof parsed.knobSize !== 'number' || !Number.isFinite(parsed.knobSize)) parsed.knobSize = KNOB_DEFAULT
       if (typeof parsed.pieceSpacing !== 'number' || !Number.isFinite(parsed.pieceSpacing)) parsed.pieceSpacing = 8
+      if (!VALID_EDGE_STYLES.includes(parsed.edgeStyle)) parsed.edgeStyle = 'straight'
+      if (typeof parsed.showBorder !== 'boolean') parsed.showBorder = true
       if (!VALID_PROGRESS_MODES.includes(parsed.progressMode)) parsed.progressMode = 'count-total'
       if (typeof parsed.progressPercent !== 'boolean') parsed.progressPercent = false
       return { ...DEFAULT_SETTINGS, ...parsed }
@@ -125,6 +128,8 @@ export default function App() {
           knobSize={settings.knobSize}
           pieceStyle={settings.pieceStyle}
           pieceSpacing={settings.pieceSpacing}
+          edgeStyle={settings.edgeStyle}
+          showBorder={settings.showBorder}
           progressMode={settings.progressMode}
           progressPercent={settings.progressPercent}
           theme={settings.theme}

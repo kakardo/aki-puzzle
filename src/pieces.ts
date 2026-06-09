@@ -6,7 +6,8 @@ export interface PieceData {
   y: number
   correctX: number
   correctY: number
-  tabs: [number, number, number, number] // top, right, bottom, left: 1=tab, -1=blank
+  tabs: [number, number, number, number]  // top, right, bottom, left: 1=tab, -1=blank
+  waves: [number, number, number, number] // top, right, bottom, left: -1..1 wave seed
   canvas: HTMLCanvasElement
   displayW: number
   displayH: number
@@ -45,6 +46,24 @@ function smoothBeziers(
   return segs
 }
 
+// S-curve from (ax,ay) to (bx,by) bowing perpendicularly by amp. Adjacent
+// pieces use the same formula with negated nx/ny and negated amp (because the
+// wave seed is negated in tabGrid), so the curves are geometrically identical —
+// verified: reversing start/end with negated n and negated amp gives the same
+// bezier traversed in the opposite direction.
+function wavyLineTo(
+  ctx: CanvasRenderingContext2D,
+  ax: number, ay: number, bx: number, by: number,
+  nx: number, ny: number,
+  amp: number
+) {
+  const cp1x = ax + (bx - ax) * 0.4 + nx * amp
+  const cp1y = ay + (by - ay) * 0.4 + ny * amp
+  const cp2x = ax + (bx - ax) * 0.6 - nx * amp
+  const cp2y = ay + (by - ay) * 0.6 - ny * amp
+  ctx.bezierCurveTo(cp1x, cp1y, cp2x, cp2y, bx, by)
+}
+
 // Draw one edge from corner A to corner B. If d !== 0 a classic jigsaw tab is
 // added: broad shoulders, a short low waist, and a round bulb that overhangs
 // the waist (the undercut that makes pieces feel like they lock together). The
@@ -56,9 +75,16 @@ function edgeWithKnob(
   ax: number, ay: number, bx: number, by: number,
   nx: number, ny: number, // unit outward normal (tab protrusion direction)
   d: number,
-  u: number               // knob unit = tabSize times the effective scale
+  u: number,              // knob unit = tabSize times the effective scale
+  waveSeed = 0,
+  useWaves = false
 ) {
-  if (!d) { ctx.lineTo(bx, by); return }
+  const amp = useWaves ? u * 0.08 * waveSeed : 0
+  if (!d) {
+    if (amp) wavyLineTo(ctx, ax, ay, bx, by, nx, ny, amp)
+    else ctx.lineTo(bx, by)
+    return
+  }
 
   const L = Math.hypot(bx - ax, by - ay)
   const ux = (bx - ax) / L, uy = (by - ay) / L
@@ -68,25 +94,37 @@ function edgeWithKnob(
   ]
 
   // Tab profile in local units of u: s = along the edge, o = outward.
+  // Wide base blending into a gentle neck, then a compact round disc head
+  // that is wider than it is tall — matching the classic blue-piece jigsaw shape.
+  // Thick stem tapering gently into a round head — neck is ≈75% of head width.
+  // Points at cardinal and 45° positions keep the Catmull-Rom circular.
   const A: [number, number][] = ([
-    [-0.34, 0.00], // base-left (shoulder)
-    [-0.22, 0.20], // neck waist (pinch)
-    [-0.40, 0.52], // bulb lower-left, widest point, overhangs the waist
-    [ 0.00, 0.78], // bulb top (rounded)
-    [ 0.40, 0.52], // bulb lower-right
-    [ 0.22, 0.20], // neck waist
-    [ 0.34, 0.00], // base-right
+    [-0.24, 0.00], // base-left
+    [-0.20, 0.20], // neck left (thick stem)
+    [-0.22, 0.32], // circle entry-left
+    [-0.30, 0.50], // circle equator-left  (9 o'clock)
+    [-0.20, 0.68], // circle upper-left    (upper-left 45°)
+    [ 0.00, 0.76], // circle top           (12 o'clock)
+    [ 0.20, 0.68], // circle upper-right
+    [ 0.30, 0.50], // circle equator-right (3 o'clock)
+    [ 0.22, 0.32], // circle entry-right
+    [ 0.20, 0.20], // neck right
+    [ 0.24, 0.00], // base-right
   ] as [number, number][]).map(([s, o]): [number, number] => [s * u, o * u])
 
   // tangents at the flat-edge ends run along the edge so the knob blends in
-  const segs = smoothBeziers(A, [0.30 * u, 0], [0.30 * u, 0], 1.0)
+  const segs = smoothBeziers(A, [0.26 * u, 0], [0.26 * u, 0], 1.0)
 
-  const p = map(A[0][0], A[0][1]); ctx.lineTo(p[0], p[1])
+  const p = map(A[0][0], A[0][1])
+  if (amp) wavyLineTo(ctx, ax, ay, p[0], p[1], nx, ny, amp)
+  else ctx.lineTo(p[0], p[1])
   for (const sg of segs) {
     const c1 = map(sg[0], sg[1]), c2 = map(sg[2], sg[3]), e = map(sg[4], sg[5])
     ctx.bezierCurveTo(c1[0], c1[1], c2[0], c2[1], e[0], e[1])
   }
-  ctx.lineTo(bx, by)
+  const pEnd = map(A[A.length - 1][0], A[A.length - 1][1])
+  if (amp) wavyLineTo(ctx, pEnd[0], pEnd[1], bx, by, nx, ny, amp)
+  else ctx.lineTo(bx, by)
 }
 
 // Knob size controls how large the tabs are. The tab reaches 0.78u outward,
@@ -108,23 +146,22 @@ function drawPathStandard(
   w: number,
   h: number,
   t: number,
-  knobSize: number
+  knobSize: number,
+  waves: [number, number, number, number] = [0, 0, 0, 0],
+  useWaves = false
 ) {
   const [top, right, bottom, left] = tabs
+  const [wTop, wRight, wBottom, wLeft] = waves
 
   const u = t * knobScale(knobSize)
 
   ctx.beginPath()
   ctx.moveTo(0, 0)
 
-  // Top edge: left to right, tab protrudes upward
-  edgeWithKnob(ctx, 0, 0, w, 0, 0, -1, top, u)
-  // Right edge: top to bottom, tab protrudes rightward
-  edgeWithKnob(ctx, w, 0, w, h, 1, 0, right, u)
-  // Bottom edge: right to left, tab protrudes downward
-  edgeWithKnob(ctx, w, h, 0, h, 0, 1, bottom, u)
-  // Left edge: bottom to top, tab protrudes leftward
-  edgeWithKnob(ctx, 0, h, 0, 0, -1, 0, left, u)
+  edgeWithKnob(ctx, 0, 0, w, 0, 0, -1, top, u, wTop, useWaves)
+  edgeWithKnob(ctx, w, 0, w, h, 1, 0, right, u, wRight, useWaves)
+  edgeWithKnob(ctx, w, h, 0, h, 0, 1, bottom, u, wBottom, useWaves)
+  edgeWithKnob(ctx, 0, h, 0, 0, -1, 0, left, u, wLeft, useWaves)
 
   ctx.closePath()
 }
@@ -162,10 +199,12 @@ function drawPiecePath(
   h: number,
   t: number,
   style: string,
-  knobSize: number
+  knobSize: number,
+  waves: [number, number, number, number] = [0, 0, 0, 0],
+  useWaves = false
 ) {
   if (style === 'artsy') return drawPathArtsy(ctx, tabs, w, h, t)
-  return drawPathStandard(ctx, tabs, w, h, t, knobSize)
+  return drawPathStandard(ctx, tabs, w, h, t, knobSize, waves, useWaves)
 }
 
 export function calcPieceSize(
@@ -189,7 +228,7 @@ export function calcPieceSize(
   const pw = Math.max(1, Math.floor(frameW / cols))
   const ph = Math.max(1, Math.floor(frameH / rows))
   // larger knobs need a bigger canvas border so the tab stays in bounds
-  const padding = Math.max(6, Math.round(Math.min(pw, ph) * 0.28 * Math.max(1, knobScale(knobSize))))
+  const padding = Math.max(2, Math.round(Math.min(pw, ph) * 0.28 * Math.max(1, knobScale(knobSize))))
   return { pw, ph, padding }
 }
 
@@ -418,7 +457,12 @@ export function generatePieceLayout(
   for (let r = 0; r <= rows; r++) {
     tabGrid[r] = []
     for (let c = 0; c <= cols; c++) {
-      tabGrid[r][c] = [Math.random() < 0.5 ? 1 : -1, Math.random() < 0.5 ? 1 : -1]
+      tabGrid[r][c] = [
+        Math.random() < 0.5 ? 1 : -1, // vertical tab direction
+        Math.random() < 0.5 ? 1 : -1, // horizontal tab direction
+        Math.random() * 2 - 1,         // vertical edge wave seed
+        Math.random() * 2 - 1,         // horizontal edge wave seed
+      ]
     }
   }
 
@@ -432,10 +476,16 @@ export function generatePieceLayout(
       const left   = col === 0         ? 0 : -tabGrid[row][col][1]
       const tabs: [number, number, number, number] = [top, right, bottom, left]
 
+      const wTop    = row === 0         ? 0 : tabGrid[row][col][2]
+      const wRight  = col === cols - 1  ? 0 : tabGrid[row][col + 1][3]
+      const wBottom = row === rows - 1  ? 0 : -tabGrid[row + 1][col][2]
+      const wLeft   = col === 0         ? 0 : -tabGrid[row][col][3]
+      const waves: [number, number, number, number] = [wTop, wRight, wBottom, wLeft]
+
       const correctX = (stageWidth - cols * pw) / 2 + col * pw - padding
       const correctY = (stageHeight - rows * ph) / 2 + row * ph - padding
 
-      pieces.push({ id: `${col}-${row}`, col, row, x: 0, y: 0, correctX, correctY, tabs, locked: false })
+      pieces.push({ id: `${col}-${row}`, col, row, x: 0, y: 0, correctX, correctY, tabs, waves, locked: false })
     }
   }
 
@@ -472,11 +522,17 @@ export function renderPiece(
   padding: number,
   resolution: number,
   pieceStyle = 'standard',
-  knobSize = 100
+  knobSize = 100,
+  edgeStyle: 'straight' | 'waves' = 'straight',
+  showBorder = true
 ): { canvas: HTMLCanvasElement; displayW: number; displayH: number } {
   const tabSize = padding
   const naturalRes = Math.min(image.width / (cols * pw), image.height / (rows * ph))
-  const RES = Math.max(1, Math.min(resolution, naturalRes))
+  const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1
+  // Auto (99): match image density (DPR-independent — image pixels are fixed).
+  // Fixed values: multiply by DPR so "4x" means crisp at 4x zoom on any screen,
+  // including retina displays where Konva scales all drawing by DPR internally.
+  const RES = resolution === 99 ? Math.max(1, naturalRes) : Math.max(1, resolution * dpr)
   const logicalW = pw + padding * 2
   const logicalH = ph + padding * 2
 
@@ -488,7 +544,7 @@ export function renderPiece(
 
   ctx.save()
   ctx.translate(padding, padding)
-  drawPiecePath(ctx, piece.tabs, pw, ph, tabSize, pieceStyle, knobSize)
+  drawPiecePath(ctx, piece.tabs, pw, ph, tabSize, pieceStyle, knobSize, piece.waves, edgeStyle === 'waves')
   ctx.clip()
 
   const sx = (piece.col * image.width)  / cols
@@ -507,13 +563,17 @@ export function renderPiece(
   )
   ctx.restore()
 
-  ctx.save()
-  ctx.translate(padding, padding)
-  drawPiecePath(ctx, piece.tabs, pw, ph, tabSize, pieceStyle, knobSize)
-  ctx.strokeStyle = 'rgba(0,0,0,0.3)'
-  ctx.lineWidth = 1
-  ctx.stroke()
-  ctx.restore()
+  if (showBorder) {
+    ctx.save()
+    ctx.translate(padding, padding)
+    drawPiecePath(ctx, piece.tabs, pw, ph, tabSize, pieceStyle, knobSize, piece.waves, edgeStyle === 'waves')
+    ctx.strokeStyle = 'rgba(0,0,0,0.45)'
+    // 1/RES = exactly 1 canvas pixel wide — stays crisp at any zoom level
+    // rather than scaling up with zoom like a thicker line would
+    ctx.lineWidth = 1 / RES
+    ctx.stroke()
+    ctx.restore()
+  }
 
   return { canvas, displayW: logicalW, displayH: logicalH }
 }

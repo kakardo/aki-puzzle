@@ -3,6 +3,7 @@ import { KNOB_MIN, KNOB_MAX, KNOB_DEFAULT } from './pieces'
 import './SettingsModal.css'
 
 export type PieceStyle = 'standard' | 'artsy'
+export type EdgeStyle = 'straight' | 'waves'
 
 export type ProgressMode = 'off' | 'percent' | 'count' | 'count-total'
 
@@ -14,6 +15,8 @@ export interface Settings {
   knobSize: number
   pieceStyle: PieceStyle
   pieceSpacing: number
+  edgeStyle: EdgeStyle
+  showBorder: boolean
   progressMode: ProgressMode
   progressPercent: boolean
 }
@@ -76,7 +79,7 @@ const PROGRESS_MODES: { value: ProgressMode; label: string }[] = [
 ]
 
 export default function SettingsModal({ settings, onChange, onClose, puzzleHasProgress }: Props) {
-  const { zoomStep, resolution, panStep, theme, knobSize, pieceStyle, pieceSpacing, progressMode, progressPercent } = settings
+  const { zoomStep, resolution, panStep, theme, knobSize, pieceStyle, pieceSpacing, edgeStyle, showBorder, progressMode, progressPercent } = settings
 
   const [knobInput, setKnobInput] = useState(String(knobSize))
   const [pendingSpacing, setPendingSpacing] = useState<number | null>(null)
@@ -122,13 +125,13 @@ export default function SettingsModal({ settings, onChange, onClose, puzzleHasPr
         />
 
         {(() => {
-          const steps = [1, 2, 99]
-          const labels: Record<number, string> = { 1: '1× — Normal', 2: '2× — Sharp', 99: 'Auto — Max' }
+          const steps = [1, 2, 4, 99]
+          const labels: Record<number, string> = { 1: '1x', 2: '2x', 4: '4x', 99: 'Auto' }
           const idx = steps.indexOf(resolution)
           return (
             <Stepper
               label="Piece quality"
-              display={labels[resolution] ?? 'Auto — Max'}
+              display={labels[resolution] ?? 'Auto'}
               onDecrement={() => onChange({ ...settings, resolution: steps[idx - 1] })}
               onIncrement={() => onChange({ ...settings, resolution: steps[idx + 1] })}
               decrementDisabled={idx <= 0}
@@ -136,7 +139,7 @@ export default function SettingsModal({ settings, onChange, onClose, puzzleHasPr
             />
           )
         })()}
-        <p className="setting-hint">Auto matches the image's native pixel density. Applies on next puzzle.</p>
+        <p className="setting-hint">Higher values stay crisp at greater zoom. Auto matches the image density. Applies on next puzzle.</p>
 
         <Stepper
           label="WASD distance"
@@ -181,6 +184,22 @@ export default function SettingsModal({ settings, onChange, onClose, puzzleHasPr
                 {s.label}
               </button>
             ))}
+          </div>
+        </div>
+
+        <div className="setting-row">
+          <span className="setting-label">Edge style</span>
+          <div className="theme-toggle">
+            <button className={`theme-btn${edgeStyle === 'straight' ? ' active' : ''}`} onClick={() => onChange({ ...settings, edgeStyle: 'straight' })}>Straight</button>
+            <button className={`theme-btn${edgeStyle === 'waves'    ? ' active' : ''}`} onClick={() => onChange({ ...settings, edgeStyle: 'waves'    })}>Waves</button>
+          </div>
+        </div>
+
+        <div className="setting-row">
+          <span className="setting-label">Piece border</span>
+          <div className="theme-toggle">
+            <button className={`theme-btn${showBorder  ? ' active' : ''}`} onClick={() => onChange({ ...settings, showBorder: true  })}>On</button>
+            <button className={`theme-btn${!showBorder ? ' active' : ''}`} onClick={() => onChange({ ...settings, showBorder: false })}>Off</button>
           </div>
         </div>
 
