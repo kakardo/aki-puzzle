@@ -10,7 +10,7 @@ function calcGrid(count: number, aspect: number): { cols: number; rows: number }
   return { cols, rows }
 }
 
-const DEFAULT_SETTINGS: Settings = { zoomStep: 1.25, resolution: 99, panStep: 80, theme: 'light', knobSize: KNOB_DEFAULT, pieceStyle: 'standard' }
+const DEFAULT_SETTINGS: Settings = { zoomStep: 1.25, resolution: 99, panStep: 80, theme: 'light', knobSize: KNOB_DEFAULT, pieceStyle: 'standard', pieceSpacing: 8 }
 
 const VALID_PIECE_STYLES = ['standard', 'artsy']
 
@@ -21,6 +21,7 @@ function loadSettings(): Settings {
       const parsed = JSON.parse(saved)
       if (!VALID_PIECE_STYLES.includes(parsed.pieceStyle)) parsed.pieceStyle = 'standard'
       if (typeof parsed.knobSize !== 'number' || !Number.isFinite(parsed.knobSize)) parsed.knobSize = KNOB_DEFAULT
+      if (typeof parsed.pieceSpacing !== 'number' || !Number.isFinite(parsed.pieceSpacing)) parsed.pieceSpacing = 8
       return { ...DEFAULT_SETTINGS, ...parsed }
     }
   } catch {}
@@ -51,6 +52,7 @@ export default function App() {
   const [accentColor, setAccentColor] = useState(CUSTOM_DARK)
   const [settings, setSettings] = useState<Settings>(loadSettings)
   const [showSettings, setShowSettings] = useState(false)
+  const [puzzleHasProgress, setPuzzleHasProgress] = useState(false)
 
   const { theme } = settings
 
@@ -102,6 +104,7 @@ export default function App() {
   function handleStart() {
     if (!canStart) return
     setAccentColor(matchedQuick ? matchedQuick.dark : CUSTOM_DARK)
+    setPuzzleHasProgress(false)
     setGrid(calcGrid(pieceCount, imageAspect))
   }
 
@@ -117,17 +120,23 @@ export default function App() {
           panStep={settings.panStep}
           knobSize={settings.knobSize}
           pieceStyle={settings.pieceStyle}
+          pieceSpacing={settings.pieceSpacing}
           theme={settings.theme}
           accentColor={accentColor}
           onReset={() => setGrid(null)}
           onOpenSettings={() => setShowSettings(true)}
           onToggleTheme={() => setSettings(s => ({ ...s, theme: s.theme === 'light' ? 'dark' : 'light' }))}
+          onPieceMoved={() => setPuzzleHasProgress(true)}
         />
         {showSettings && (
           <SettingsModal
             settings={settings}
-            onChange={setSettings}
+            onChange={next => {
+              if (next.pieceSpacing !== settings.pieceSpacing) setPuzzleHasProgress(false)
+              setSettings(next)
+            }}
             onClose={() => setShowSettings(false)}
+            puzzleHasProgress={puzzleHasProgress}
           />
         )}
       </>

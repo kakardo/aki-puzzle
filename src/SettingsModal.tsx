@@ -11,7 +11,12 @@ export interface Settings {
   theme: 'light' | 'dark'
   knobSize: number
   pieceStyle: PieceStyle
+  pieceSpacing: number
 }
+
+const SPACING_MIN = 0
+const SPACING_MAX = 32
+const SPACING_INC = 4
 
 const ZOOM_MIN = 1.05
 const ZOOM_MAX = 2.0
@@ -29,6 +34,7 @@ interface Props {
   settings: Settings
   onChange: (s: Settings) => void
   onClose: () => void
+  puzzleHasProgress?: boolean
 }
 
 function Stepper({
@@ -58,10 +64,19 @@ function Stepper({
   )
 }
 
-export default function SettingsModal({ settings, onChange, onClose }: Props) {
-  const { zoomStep, resolution, panStep, theme, knobSize, pieceStyle } = settings
+export default function SettingsModal({ settings, onChange, onClose, puzzleHasProgress }: Props) {
+  const { zoomStep, resolution, panStep, theme, knobSize, pieceStyle, pieceSpacing } = settings
 
   const [knobInput, setKnobInput] = useState(String(knobSize))
+  const [pendingSpacing, setPendingSpacing] = useState<number | null>(null)
+
+  function requestSpacingChange(next: number) {
+    if (puzzleHasProgress) {
+      setPendingSpacing(next)
+    } else {
+      onChange({ ...settings, pieceSpacing: next })
+    }
+  }
   const commitKnob = () => {
     let v = parseInt(knobInput, 10)
     if (!Number.isFinite(v)) v = knobSize
@@ -157,6 +172,26 @@ export default function SettingsModal({ settings, onChange, onClose }: Props) {
             ))}
           </div>
         </div>
+
+        <Stepper
+          label="Piece spacing"
+          display={`${pendingSpacing ?? pieceSpacing}px`}
+          onDecrement={() => requestSpacingChange(Math.max(SPACING_MIN, (pendingSpacing ?? pieceSpacing) - SPACING_INC))}
+          onIncrement={() => requestSpacingChange(Math.min(SPACING_MAX, (pendingSpacing ?? pieceSpacing) + SPACING_INC))}
+          decrementDisabled={(pendingSpacing ?? pieceSpacing) <= SPACING_MIN}
+          incrementDisabled={(pendingSpacing ?? pieceSpacing) >= SPACING_MAX}
+        />
+        {pendingSpacing !== null ? (
+          <div className="spacing-warning">
+            <span className="spacing-warning-text">Scattered pieces will be reshuffled.</span>
+            <div className="spacing-warning-actions">
+              <button className="spacing-btn spacing-btn--cancel" onClick={() => setPendingSpacing(null)}>Cancel</button>
+              <button className="spacing-btn spacing-btn--apply" onClick={() => { onChange({ ...settings, pieceSpacing: pendingSpacing }); setPendingSpacing(null) }}>Apply</button>
+            </div>
+          </div>
+        ) : (
+          <p className="setting-hint">Gap between scattered pieces.</p>
+        )}
       </div>
     </div>
   )

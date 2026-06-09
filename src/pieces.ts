@@ -200,11 +200,10 @@ export function generatePieceLayout(
   rows: number,
   stageWidth: number,
   stageHeight: number,
-  knobSize = 100
+  knobSize = 100,
+  gap = 8
 ): { pieces: Omit<PieceData, 'imageDataUrl' | 'displayW' | 'displayH'>[], pw: number; ph: number; padding: number } {
   const { pw, ph, padding } = calcPieceSize(image, cols, rows, stageWidth, stageHeight, knobSize)
-
-  const gap = 8
   const slotW = pw + padding * 2 + gap
   const slotH = ph + padding * 2 + gap
 

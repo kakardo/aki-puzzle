@@ -162,3 +162,50 @@
   font-size: 0.9rem;
   color: var(--subtle);
 }
+
+.spacing-warning {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 6px;
+  background: rgba(220, 50, 50, 0.07);
+  border: 1px solid rgba(220, 50, 50, 0.3);
+}
+
+.spacing-warning-text {
+  font-size: 0.82rem;
+  color: var(--text);
+}
+
+.spacing-warning-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+}
+
+.spacing-btn {
+  padding: 0.25rem 0.75rem;
+  border-radius: 5px;
+  border: 1px solid var(--border);
+  font-size: 0.82rem;
+  cursor: pointer;
+  background: var(--surface);
+  color: var(--text);
+  transition: background 0.1s;
+}
+
+.spacing-btn:hover {
+  background: var(--hover);
+}
+
+.spacing-btn--apply {
+  background: var(--text);
+  color: var(--bg);
+  border-color: var(--text);
+}
+
+.spacing-btn--apply:hover {
+  opacity: 0.85;
+  background: var(--text);
+}

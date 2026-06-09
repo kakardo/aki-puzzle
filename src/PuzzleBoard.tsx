@@ -14,16 +14,18 @@ interface Props {
   panStep: number
   knobSize: number
   pieceStyle: string
+  pieceSpacing: number
   theme: 'light' | 'dark'
   accentColor: string
   onReset: () => void
   onOpenSettings: () => void
   onToggleTheme: () => void
+  onPieceMoved: () => void
 }
 
 const SNAP_THRESHOLD = 30
 
-export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep, resolution, panStep, knobSize, pieceStyle, theme, accentColor, onReset, onOpenSettings, onToggleTheme }: Props) {
+export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep, resolution, panStep, knobSize, pieceStyle, pieceSpacing, theme, accentColor, onReset, onOpenSettings, onToggleTheme, onPieceMoved }: Props) {
   const [pieces, setPieces] = useState<PieceData[]>([])
   const [groups, setGroups] = useState<Record<string, string>>({})
   const [solved, setSolved] = useState(false)
@@ -45,6 +47,7 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
   const [loadingSteps, setLoadingSteps] = useState<{ label: string; done: boolean; detail?: string }[]>([])
   const [menuOpen, setMenuOpen] = useState(false)
   const [confirmLeave, setConfirmLeave] = useState(false)
+  const [showPreview, setShowPreview] = useState(false)
   const stageRef = useRef<KonvaType.Stage>(null)
   const nodeRefs = useRef<Record<string, KonvaType.Image>>({})
   const lastPos = useRef<{ x: number; y: number } | null>(null)
@@ -63,6 +66,19 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
 
   useEffect(() => { groupsRef.current = groups }, [groups])
   useEffect(() => { piecesRef.current = pieces }, [pieces])
+
+  // Reposition unlocked pieces when piece spacing changes mid-puzzle
+  useEffect(() => {
+    const img = sourceImageRef.current
+    if (!img || pieces.length === 0) return
+    const { pieces: newLayouts } = generatePieceLayout(img, COLS, ROWS, genSizeRef.current.width, genSizeRef.current.height, knobSize, pieceSpacing)
+    setPieces(prev => prev.map(p => {
+      if (p.locked) return p
+      const layout = newLayouts.find(l => l.id === p.id)
+      if (!layout) return p
+      return { ...p, x: layout.x, y: layout.y }
+    }))
+  }, [pieceSpacing])
 
   // Re-render piece canvases when knobSize or pieceStyle changes mid-puzzle
   useEffect(() => {
@@ -112,7 +128,7 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
         x: (size.width - COLS * ps.pw) / 2,
         y: (size.height - ROWS * ps.ph) / 2,
       })
-      const { pieces: layouts, pw, ph, padding } = generatePieceLayout(img, COLS, ROWS, size.width, size.height, knobSize)
+      const { pieces: layouts, pw, ph, padding } = generatePieceLayout(img, COLS, ROWS, size.width, size.height, knobSize, pieceSpacing)
       layoutRef.current = layouts
 
       setLoadingSteps([
@@ -160,6 +176,7 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      if (e.key === 'Tab') { e.preventDefault(); if (!e.repeat) setShowPreview(v => !v); return }
       const key = e.key.toLowerCase()
       if (key === 'e') {
         const newZoom = Math.min(zoomRef.current * zoomStep, 8)
@@ -211,6 +228,7 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
 
   function handleDragStart(id: string, x: number, y: number) {
     lastPos.current = { x, y }
+    onPieceMoved()
     // bring group to front in state (z-order)
     setPieces(prev => {
       const groupIds = getGroupIds(id, groupsRef.current, prev)
@@ -440,6 +458,9 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
               <button className="dropdown-item" onClick={() => { resetToInitialFit(); setMenuOpen(false) }}>
                 Reset zoom
               </button>
+              <button className="dropdown-item" onClick={() => { setShowPreview(v => !v); setMenuOpen(false) }}>
+                {showPreview ? 'Hide preview' : 'Show preview'}
+              </button>
               <button className="dropdown-item" onClick={() => { onOpenSettings(); setMenuOpen(false) }}>
                 Settings
               </button>
@@ -455,6 +476,7 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
                 <span><kbd>Scroll</kbd> Zoom to cursor</span>
                 <span><kbd>WASD</kbd> Pan</span>
                 <span><kbd>Drag</kbd> Pan</span>
+                <span><kbd>Tab</kbd> Preview image</span>
               </div>
             </div>
           </>
@@ -497,6 +519,19 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
           }}
         />
       )}
+
+      <div
+        className="preview-overlay"
+        style={{ opacity: showPreview ? 1 : 0, pointerEvents: showPreview ? 'auto' : 'none' }}
+        onClick={() => setShowPreview(false)}
+      >
+        <img
+          className="preview-image"
+          src={imageSrc}
+          alt="Preview"
+          onClick={e => e.stopPropagation()}
+        />
+      </div>
 
       <Stage
         ref={stageRef}
