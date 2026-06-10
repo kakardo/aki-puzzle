@@ -41,11 +41,11 @@ Open the menu (top left) and choose **Settings**.
 | Setting | Options | Default |
 |---|---|---|
 | Zoom step | 1.05x to 2.00x | 1.25x |
-| Piece quality | 1x, 2x, 4x, Auto | 4x |
+| Piece quality | 1x, 2x, 4x, Auto | Auto |
 | WASD distance | 20 px to 300 px | 80 px |
-| Knob size | 40 to 128 | 116 |
+| Knob size | 40 to 128 | 120 |
 | Piece style | Standard, Artsy | Standard |
-| Piece spacing | 0 px to 32 px | 8 px |
+| Piece spacing | 0 px to 32 px | 4 px |
 | Progress | Off, %, Count, Count+Total | Count+Total |
 | Show % | On, Off | Off |
 
@@ -54,6 +54,8 @@ Auto quality matches the image's native pixel density and is the right choice fo
 Knob size is typed in as a number. The maximum of 128 is the point where the knobs reach the edge of the piece, so anything larger would be clipped. Changing it re-cuts the pieces straight away.
 
 Piece spacing controls the gap between scattered pieces at the start of a puzzle. Changing it mid-puzzle reshuffles unlocked pieces; a confirmation appears if any piece has already been moved.
+
+**Reset to defaults** restores all settings to their original values. If any piece has been moved and the reset would change the piece spacing, a confirmation appears before applying, since that will reshuffle the board.
 
 The progress counter is shown below the menu button and in the open menu. Count+Total displays the number of locked pieces and the total, e.g. `85/500`. Show % adds the percentage in parentheses, e.g. `85/500 (17%)`.
 

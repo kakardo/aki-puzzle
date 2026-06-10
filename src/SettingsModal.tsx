@@ -2,6 +2,20 @@ import { useState } from 'react'
 import { KNOB_MIN, KNOB_MAX, KNOB_DEFAULT } from './pieces'
 import './SettingsModal.css'
 
+export const DEFAULT_SETTINGS: Settings = {
+  zoomStep: 1.25,
+  resolution: 99,
+  panStep: 80,
+  theme: 'light',
+  knobSize: 120,
+  pieceStyle: 'standard',
+  pieceSpacing: 4,
+  edgeStyle: 'straight',
+  showBorder: true,
+  progressMode: 'count-total',
+  progressPercent: false,
+}
+
 export type PieceStyle = 'standard' | 'artsy'
 export type EdgeStyle = 'straight' | 'waves'
 
@@ -83,6 +97,23 @@ export default function SettingsModal({ settings, onChange, onClose, puzzleHasPr
 
   const [knobInput, setKnobInput] = useState(String(knobSize))
   const [pendingSpacing, setPendingSpacing] = useState<number | null>(null)
+  const [pendingReset, setPendingReset] = useState(false)
+
+  function requestReset() {
+    if (puzzleHasProgress && settings.pieceSpacing !== DEFAULT_SETTINGS.pieceSpacing) {
+      setPendingReset(true)
+      setPendingSpacing(null)
+    } else {
+      applyReset()
+    }
+  }
+
+  function applyReset() {
+    onChange(DEFAULT_SETTINGS)
+    setKnobInput(String(DEFAULT_SETTINGS.knobSize))
+    setPendingSpacing(null)
+    setPendingReset(false)
+  }
 
   function requestSpacingChange(next: number) {
     if (puzzleHasProgress) {
@@ -170,7 +201,7 @@ export default function SettingsModal({ settings, onChange, onClose, puzzleHasPr
             <span className="knob-unit">%</span>
           </div>
         </div>
-        <p className="setting-hint">Default {KNOB_DEFAULT}. Range {KNOB_MIN} to {KNOB_MAX}, where knobs reach the piece edge.</p>
+        <p className="setting-hint">Default {DEFAULT_SETTINGS.knobSize}. Range {KNOB_MIN} to {KNOB_MAX}, where knobs reach the piece edge.</p>
 
         <div className="setting-row">
           <span className="setting-label">Piece style</span>
@@ -238,6 +269,22 @@ export default function SettingsModal({ settings, onChange, onClose, puzzleHasPr
             <div className="theme-toggle">
               <button className={`theme-btn${progressPercent ? ' active' : ''}`} onClick={() => onChange({ ...settings, progressPercent: true })}>On</button>
               <button className={`theme-btn${!progressPercent ? ' active' : ''}`} onClick={() => onChange({ ...settings, progressPercent: false })}>Off</button>
+            </div>
+          </div>
+        )}
+
+        <div className="setting-divider" />
+
+        <div className="reset-row">
+          <button className="reset-btn" onClick={requestReset}>Reset to defaults</button>
+        </div>
+
+        {pendingReset && (
+          <div className="spacing-warning">
+            <span className="spacing-warning-text">Scattered pieces will be reshuffled.</span>
+            <div className="spacing-warning-actions">
+              <button className="spacing-btn spacing-btn--cancel" onClick={() => setPendingReset(false)}>Cancel</button>
+              <button className="spacing-btn spacing-btn--apply" onClick={applyReset}>Apply</button>
             </div>
           </div>
         )}

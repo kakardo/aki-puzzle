@@ -209,3 +209,24 @@
   opacity: 0.85;
   background: var(--text);
 }
+
+.reset-row {
+  display: flex;
+  justify-content: center;
+}
+
+.reset-btn {
+  padding: 0.3rem 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: none;
+  color: var(--subtle);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+
+.reset-btn:hover {
+  background: var(--hover);
+  color: var(--text);
+}
