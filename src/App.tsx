@@ -11,7 +11,8 @@ function calcGrid(count: number, aspect: number): { cols: number; rows: number }
 }
 
 const VALID_PROGRESS_MODES: ProgressMode[] = ['off', 'percent', 'count', 'count-total']
-const VALID_EDGE_STYLES: EdgeStyle[] = ['straight', 'waves']
+// Waves is parked for now, so saved settings fall back to straight.
+const VALID_EDGE_STYLES: EdgeStyle[] = ['straight']
 
 const DEFAULT_SETTINGS: Settings = { zoomStep: 1.25, resolution: 4, panStep: 80, theme: 'light', knobSize: KNOB_DEFAULT, pieceStyle: 'standard', pieceSpacing: 8, edgeStyle: 'straight', showBorder: true, progressMode: 'count-total', progressPercent: false }
 

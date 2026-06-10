@@ -48,8 +48,8 @@ function smoothBeziers(
 
 // S-curve from (ax,ay) to (bx,by) bowing perpendicularly by amp. Adjacent
 // pieces use the same formula with negated nx/ny and negated amp (because the
-// wave seed is negated in tabGrid), so the curves are geometrically identical —
-// verified: reversing start/end with negated n and negated amp gives the same
+// wave seed is negated in tabGrid), so the curves are geometrically identical.
+// Verified: reversing start/end with negated n and negated amp gives the same
 // bezier traversed in the opposite direction.
 function wavyLineTo(
   ctx: CanvasRenderingContext2D,
@@ -95,8 +95,8 @@ function edgeWithKnob(
 
   // Tab profile in local units of u: s = along the edge, o = outward.
   // Wide base blending into a gentle neck, then a compact round disc head
-  // that is wider than it is tall — matching the classic blue-piece jigsaw shape.
-  // Thick stem tapering gently into a round head — neck is ≈75% of head width.
+  // that is wider than it is tall, matching the classic blue-piece jigsaw shape.
+  // Thick stem tapering gently into a round head. Neck is roughly 75% of head width.
   // Points at cardinal and 45° positions keep the Catmull-Rom circular.
   const A: [number, number][] = ([
     [-0.24, 0.00], // base-left
@@ -166,7 +166,7 @@ function drawPathStandard(
   ctx.closePath()
 }
 
-// Artsy: copy of Standard — modify this one to create a distinct look
+// Artsy: copy of Standard. Modify this one to create a distinct look
 function drawPathArtsy(
   ctx: CanvasRenderingContext2D,
   tabs: [number, number, number, number],
@@ -232,7 +232,7 @@ export function calcPieceSize(
   return { pw, ph, padding }
 }
 
-// Phase 1: fast — compute positions, slots, and tab shapes. No canvas work.
+// Phase 1: fast. Compute positions, slots, and tab shapes. No canvas work.
 export function generatePieceLayout(
   image: HTMLImageElement,
   cols: number,
@@ -524,12 +524,12 @@ export function renderPiece(
   pieceStyle = 'standard',
   knobSize = 100,
   edgeStyle: 'straight' | 'waves' = 'straight',
-  showBorder = true
+  showBorder = true,
 ): { canvas: HTMLCanvasElement; displayW: number; displayH: number } {
   const tabSize = padding
   const naturalRes = Math.min(image.width / (cols * pw), image.height / (rows * ph))
   const dpr = typeof window !== 'undefined' ? (window.devicePixelRatio || 1) : 1
-  // Auto (99): match image density (DPR-independent — image pixels are fixed).
+  // Auto (99): match image density (DPR-independent, image pixels are fixed).
   // Fixed values: multiply by DPR so "4x" means crisp at 4x zoom on any screen,
   // including retina displays where Konva scales all drawing by DPR internally.
   const RES = resolution === 99 ? Math.max(1, naturalRes) : Math.max(1, resolution * dpr)
@@ -563,20 +563,27 @@ export function renderPiece(
   )
   ctx.restore()
 
-  if (showBorder) {
-    ctx.save()
-    ctx.translate(padding, padding)
-    drawPiecePath(ctx, piece.tabs, pw, ph, tabSize, pieceStyle, knobSize, piece.waves, edgeStyle === 'waves')
-    ctx.strokeStyle = 'rgba(0,0,0,0.45)'
-    // 1/RES = exactly 1 canvas pixel wide — stays crisp at any zoom level
-    // rather than scaling up with zoom like a thicker line would
-    ctx.lineWidth = 1 / RES
-    ctx.stroke()
-    ctx.restore()
-  }
+  // Border is drawn externally on a live overlay canvas so it stays
+  // 1 physical pixel at every zoom level. Nothing to do here.
 
   return { canvas, displayW: logicalW, displayH: logicalH }
 }
 
 // Keep type alias for the return of renderPiece
 export type RenderedPiece = { canvas: HTMLCanvasElement; displayW: number; displayH: number }
+
+// Draw only the outline path for a piece into an external canvas context.
+// Used by the live border overlay in PuzzleBoard so borders are always
+// rendered at 1 physical pixel regardless of zoom level.
+export function renderPieceOutline(
+  ctx: CanvasRenderingContext2D,
+  piece: Pick<PieceData, 'tabs' | 'waves'>,
+  pw: number,
+  ph: number,
+  tabSize: number,
+  pieceStyle: string,
+  knobSize: number,
+  edgeStyle: 'straight' | 'waves'
+) {
+  drawPiecePath(ctx, piece.tabs, pw, ph, tabSize, pieceStyle, knobSize, piece.waves, edgeStyle === 'waves')
+}

@@ -6,7 +6,7 @@ import type { PieceData } from '../pieces'
 /**
  * Debug only. Press X to snap 5% of remaining unlocked pieces into place.
  * The hook is always called (satisfying React's rules) but the listener is
- * a no-op in production builds — Vite replaces import.meta.env.DEV with
+ * a no-op in production builds. Vite replaces import.meta.env.DEV with
  * false and Rollup removes the dead code entirely.
  */
 export function useDebugSolve(

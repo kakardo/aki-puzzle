@@ -79,7 +79,7 @@ const PROGRESS_MODES: { value: ProgressMode; label: string }[] = [
 ]
 
 export default function SettingsModal({ settings, onChange, onClose, puzzleHasProgress }: Props) {
-  const { zoomStep, resolution, panStep, theme, knobSize, pieceStyle, pieceSpacing, edgeStyle, showBorder, progressMode, progressPercent } = settings
+  const { zoomStep, resolution, panStep, theme, knobSize, pieceStyle, pieceSpacing, showBorder, progressMode, progressPercent } = settings
 
   const [knobInput, setKnobInput] = useState(String(knobSize))
   const [pendingSpacing, setPendingSpacing] = useState<number | null>(null)
@@ -184,14 +184,6 @@ export default function SettingsModal({ settings, onChange, onClose, puzzleHasPr
                 {s.label}
               </button>
             ))}
-          </div>
-        </div>
-
-        <div className="setting-row">
-          <span className="setting-label">Edge style</span>
-          <div className="theme-toggle">
-            <button className={`theme-btn${edgeStyle === 'straight' ? ' active' : ''}`} onClick={() => onChange({ ...settings, edgeStyle: 'straight' })}>Straight</button>
-            <button className={`theme-btn${edgeStyle === 'waves'    ? ' active' : ''}`} onClick={() => onChange({ ...settings, edgeStyle: 'waves'    })}>Waves</button>
           </div>
         </div>
 

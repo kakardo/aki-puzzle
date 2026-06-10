@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Stage, Layer, Image as KonvaImage, Rect } from 'react-konva'
 import type KonvaType from 'konva'
 import type { KonvaEventObject } from 'konva/lib/Node'
-import { generatePieceLayout, renderPiece, calcPieceSize, type PieceData } from './pieces'
+import { generatePieceLayout, renderPiece, calcPieceSize, renderPieceOutline, type PieceData } from './pieces'
 import type { ProgressMode, EdgeStyle } from './SettingsModal'
 import DebugOverlay from './debug/DebugOverlay'
 import { useDebugSolve } from './debug/useDebugSolve'
@@ -65,6 +65,7 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
   const [confirmLeave, setConfirmLeave] = useState(false)
   const [showPreview, setShowPreview] = useState(false)
   const stageRef = useRef<KonvaType.Stage>(null)
+  const borderCanvasRef = useRef<HTMLCanvasElement>(null)
   const nodeRefs = useRef<Record<string, KonvaType.Image>>({})
   const lastPos = useRef<{ x: number; y: number } | null>(null)
   const isPanning = useRef(false)
@@ -256,7 +257,7 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
     })
   }
 
-  // Move group members imperatively — no React state, no lag
+  // Move group members imperatively. No React state, no lag
   function handleDragMove(id: string, x: number, y: number) {
     if (!lastPos.current) return
     const dx = x - lastPos.current.x
@@ -272,6 +273,7 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
         node.y(node.y() + dy)
       }
     })
+    redrawBordersRef.current()
   }
 
   function handleDragEnd(id: string, finalX: number, finalY: number) {
@@ -322,7 +324,7 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
         }
       }
 
-      // snap to grid — check any piece in the group
+      // snap to grid: check any piece in the group
       if (!snapped) {
         for (const gid of groupIds) {
           const gp = next.find(p => p.id === gid)!
@@ -362,6 +364,79 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
   const lockedCount = pieces.filter(p => p.locked).length
   const totalCount = pieces.length
   const progressText = formatProgress(lockedCount, totalCount, progressMode, progressPercent)
+
+  // Reactive border draw. useLayoutEffect so it runs before the browser paints,
+  // keeping borders in lockstep with the Konva stage on every zoom/pan/state change
+  useLayoutEffect(() => {
+    const canvas = borderCanvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')!
+    const dpr = window.devicePixelRatio || 1
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    if (!showBorder || pieces.length === 0) return
+    const { pw, ph, padding } = pieceSize
+    ctx.save()
+    ctx.scale(dpr, dpr)
+    ctx.translate(pan.x, pan.y)
+    ctx.scale(zoom, zoom)
+    ctx.strokeStyle = 'rgba(0,0,0,0.55)'
+    ctx.lineWidth = 1 / zoom
+    // Mirror the stage stacking: locked pieces sit in a lower layer, unlocked
+    // pieces render in array order (the dragged group is moved to the end).
+    // Before stroking a piece, punch out any lines already drawn beneath its
+    // body so outlines of covered pieces never bleed through the one on top.
+    const ordered = [...pieces.filter(p => p.locked), ...pieces.filter(p => !p.locked)]
+    for (const p of ordered) {
+      const node = nodeRefs.current[p.id]
+      const nx = node ? node.x() : p.x
+      const ny = node ? node.y() : p.y
+      ctx.save()
+      ctx.translate(nx + padding, ny + padding)
+      renderPieceOutline(ctx, p, pw, ph, padding, pieceStyle, knobSize, edgeStyle)
+      ctx.globalCompositeOperation = 'destination-out'
+      ctx.fill()
+      ctx.globalCompositeOperation = 'source-over'
+      ctx.stroke()
+      ctx.restore()
+    }
+    ctx.restore()
+  }, [pieces, zoom, pan, showBorder, pieceSize, pieceStyle, knobSize, edgeStyle, size])
+
+  // Imperative border draw for drag/pan moves. Uses refs so stale closures stay current
+  const redrawBordersRef = useRef<() => void>(() => {})
+  redrawBordersRef.current = () => {
+    const canvas = borderCanvasRef.current
+    if (!canvas) return
+    const ctx = canvas.getContext('2d')!
+    const dpr = window.devicePixelRatio || 1
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+    if (!showBorder) return
+    const { pw, ph, padding } = pieceSizeRef.current
+    ctx.save()
+    ctx.scale(dpr, dpr)
+    ctx.translate(panRef.current.x, panRef.current.y)
+    ctx.scale(zoomRef.current, zoomRef.current)
+    ctx.strokeStyle = 'rgba(0,0,0,0.55)'
+    ctx.lineWidth = 1 / zoomRef.current
+    // Same stacking-aware draw as the reactive effect above: erase lines under
+    // each piece body, then stroke its own outline, in z-order.
+    const all = piecesRef.current
+    const ordered = [...all.filter(p => p.locked), ...all.filter(p => !p.locked)]
+    for (const p of ordered) {
+      const node = nodeRefs.current[p.id]
+      const nx = node ? node.x() : p.x
+      const ny = node ? node.y() : p.y
+      ctx.save()
+      ctx.translate(nx + padding, ny + padding)
+      renderPieceOutline(ctx, p, pw, ph, padding, pieceStyle, knobSize, edgeStyle)
+      ctx.globalCompositeOperation = 'destination-out'
+      ctx.fill()
+      ctx.globalCompositeOperation = 'source-over'
+      ctx.stroke()
+      ctx.restore()
+    }
+    ctx.restore()
+  }
 
   const actualCanvasRes = (() => {
     const img = sourceImageRef.current
@@ -446,11 +521,23 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
       x: e.evt.clientX - panAnchor.current.x,
       y: e.evt.clientY - panAnchor.current.y,
     }
-    setPan(newPan)
+    // Move the stage imperatively, same as piece dragging. Going through
+    // setPan here re-renders the whole stage one frame behind the border
+    // canvas, which makes the lines shake and drift outside the pieces.
     panRef.current = newPan
+    const stage = stageRef.current
+    if (stage) {
+      stage.position(newPan)
+      stage.batchDraw()
+    }
+    redrawBordersRef.current()
   }
 
   function handleStageMouseUp() {
+    if (isPanning.current) {
+      // Commit the final pan to state once, so React and the refs agree.
+      setPan(panRef.current)
+    }
     isPanning.current = false
   }
 
@@ -619,6 +706,10 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
               width={p.displayW}
               height={p.displayH}
               draggable={false}
+              clipFunc={(ctx: any) => {
+                ctx.translate(pieceSize.padding, pieceSize.padding)
+                renderPieceOutline(ctx as unknown as CanvasRenderingContext2D, p, pieceSize.pw, pieceSize.ph, pieceSize.padding, pieceStyle, knobSize, edgeStyle)
+              }}
             />
           ))}
         </Layer>
@@ -633,6 +724,18 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
               width={p.displayW}
               height={p.displayH}
               draggable
+              clipFunc={(ctx: any) => {
+                ctx.translate(pieceSize.padding, pieceSize.padding)
+                renderPieceOutline(ctx as unknown as CanvasRenderingContext2D, p, pieceSize.pw, pieceSize.ph, pieceSize.padding, pieceStyle, knobSize, edgeStyle)
+              }}
+              // Hit area follows the piece path instead of the padded square,
+              // so knobs are grabbable and holes let you grab what is beneath.
+              hitFunc={(ctx: any, shape: any) => {
+                ctx.translate(pieceSize.padding, pieceSize.padding)
+                renderPieceOutline(ctx as unknown as CanvasRenderingContext2D, p, pieceSize.pw, pieceSize.ph, pieceSize.padding, pieceStyle, knobSize, edgeStyle)
+                ctx.closePath()
+                ctx.fillStrokeShape(shape)
+              }}
               onDragStart={e => handleDragStart(p.id, e.target.x(), e.target.y())}
               onDragMove={e => handleDragMove(p.id, e.target.x(), e.target.y())}
               onDragEnd={e => handleDragEnd(p.id, e.target.x(), e.target.y())}
@@ -640,6 +743,13 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
           ))}
         </Layer>
       </Stage>
+
+      <canvas
+        ref={borderCanvasRef}
+        width={size.width * (window.devicePixelRatio || 1)}
+        height={size.height * (window.devicePixelRatio || 1)}
+        style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
+      />
     </div>
   )
 }
