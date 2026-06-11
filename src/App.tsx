@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import PuzzleBoard from './PuzzleBoard'
-import SettingsModal, { type Settings, type ProgressMode, type EdgeStyle, DEFAULT_SETTINGS } from './SettingsModal'
+import SettingsModal, { type Settings, type ProgressMode, type EdgeStyle, type RippleQuality, DEFAULT_SETTINGS } from './SettingsModal'
 import { KNOB_DEFAULT } from './pieces'
 import './App.css'
 
@@ -16,6 +16,8 @@ const VALID_EDGE_STYLES: EdgeStyle[] = ['straight']
 
 const VALID_PIECE_STYLES = ['standard', 'artsy']
 
+const VALID_RIPPLE_QUALITIES: RippleQuality[] = ['off', 'low', 'mid', 'high']
+
 function loadSettings(): Settings {
   try {
     const saved = localStorage.getItem('zenpiece-settings')
@@ -26,6 +28,11 @@ function loadSettings(): Settings {
       if (typeof parsed.pieceSpacing !== 'number' || !Number.isFinite(parsed.pieceSpacing)) parsed.pieceSpacing = 8
       if (!VALID_EDGE_STYLES.includes(parsed.edgeStyle)) parsed.edgeStyle = 'straight'
       if (typeof parsed.showBorder !== 'boolean') parsed.showBorder = true
+      if (!VALID_RIPPLE_QUALITIES.includes(parsed.rippleQuality)) {
+        // Migrate the old boolean toggle: On becomes Mid
+        parsed.rippleQuality = parsed.showRipple === false ? 'off' : 'mid'
+      }
+      delete parsed.showRipple
       if (!VALID_PROGRESS_MODES.includes(parsed.progressMode)) parsed.progressMode = 'count-total'
       if (typeof parsed.progressPercent !== 'boolean') parsed.progressPercent = false
       return { ...DEFAULT_SETTINGS, ...parsed }
@@ -129,6 +136,7 @@ export default function App() {
           pieceSpacing={settings.pieceSpacing}
           edgeStyle={settings.edgeStyle}
           showBorder={settings.showBorder}
+          rippleQuality={settings.rippleQuality}
           progressMode={settings.progressMode}
           progressPercent={settings.progressPercent}
           theme={settings.theme}

@@ -12,6 +12,7 @@ export const DEFAULT_SETTINGS: Settings = {
   pieceSpacing: 4,
   edgeStyle: 'straight',
   showBorder: true,
+  rippleQuality: 'mid',
   progressMode: 'count-total',
   progressPercent: false,
 }
@@ -20,6 +21,8 @@ export type PieceStyle = 'standard' | 'artsy'
 export type EdgeStyle = 'straight' | 'waves'
 
 export type ProgressMode = 'off' | 'percent' | 'count' | 'count-total'
+
+export type RippleQuality = 'off' | 'low' | 'mid' | 'high'
 
 export interface Settings {
   zoomStep: number
@@ -31,6 +34,7 @@ export interface Settings {
   pieceSpacing: number
   edgeStyle: EdgeStyle
   showBorder: boolean
+  rippleQuality: RippleQuality
   progressMode: ProgressMode
   progressPercent: boolean
 }
@@ -85,6 +89,13 @@ function Stepper({
   )
 }
 
+const RIPPLE_QUALITIES: { value: RippleQuality; label: string }[] = [
+  { value: 'off',  label: 'Off' },
+  { value: 'low',  label: 'Low' },
+  { value: 'mid',  label: 'Mid' },
+  { value: 'high', label: 'High' },
+]
+
 const PROGRESS_MODES: { value: ProgressMode; label: string }[] = [
   { value: 'off',         label: 'Off' },
   { value: 'percent',     label: '%' },
@@ -93,7 +104,7 @@ const PROGRESS_MODES: { value: ProgressMode; label: string }[] = [
 ]
 
 export default function SettingsModal({ settings, onChange, onClose, puzzleHasProgress }: Props) {
-  const { zoomStep, resolution, panStep, theme, knobSize, pieceStyle, pieceSpacing, showBorder, progressMode, progressPercent } = settings
+  const { zoomStep, resolution, panStep, theme, knobSize, pieceStyle, pieceSpacing, showBorder, rippleQuality, progressMode, progressPercent } = settings
 
   const [knobInput, setKnobInput] = useState(String(knobSize))
   const [pendingSpacing, setPendingSpacing] = useState<number | null>(null)
@@ -225,6 +236,22 @@ export default function SettingsModal({ settings, onChange, onClose, puzzleHasPr
             <button className={`theme-btn${!showBorder ? ' active' : ''}`} onClick={() => onChange({ ...settings, showBorder: false })}>Off</button>
           </div>
         </div>
+
+        <div className="setting-row">
+          <span className="setting-label">Ripple effect</span>
+          <div className="theme-toggle">
+            {RIPPLE_QUALITIES.map(q => (
+              <button
+                key={q.value}
+                className={`theme-btn${rippleQuality === q.value ? ' active' : ''}`}
+                onClick={() => onChange({ ...settings, rippleQuality: q.value })}
+              >
+                {q.label}
+              </button>
+            ))}
+          </div>
+        </div>
+        <p className="setting-hint">Wave across the picture when the final piece is placed. Lower quality runs smoother on weaker machines.</p>
 
         <Stepper
           label="Piece spacing"

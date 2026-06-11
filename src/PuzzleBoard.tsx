@@ -3,10 +3,11 @@ import { Stage, Layer, Image as KonvaImage, Rect } from 'react-konva'
 import type KonvaType from 'konva'
 import type { KonvaEventObject } from 'konva/lib/Node'
 import { generatePieceLayout, renderPiece, calcPieceSize, renderPieceOutline, type PieceData } from './pieces'
-import type { ProgressMode, EdgeStyle } from './SettingsModal'
+import type { ProgressMode, EdgeStyle, RippleQuality } from './SettingsModal'
 import DebugOverlay from './debug/DebugOverlay'
 import { useDebugSolve } from './debug/useDebugSolve'
 import Fireworks from './animations/Fireworks'
+import Ripple from './animations/Ripple'
 
 interface Props {
   imageSrc: string
@@ -20,6 +21,7 @@ interface Props {
   pieceSpacing: number
   edgeStyle: EdgeStyle
   showBorder: boolean
+  rippleQuality: RippleQuality
   progressMode: ProgressMode
   progressPercent: boolean
   theme: 'light' | 'dark'
@@ -49,10 +51,11 @@ function formatProgress(locked: number, total: number, mode: ProgressMode, showP
   return `${locked}/${total}${pctStr}`
 }
 
-export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep, resolution, panStep, knobSize, pieceStyle, pieceSpacing, edgeStyle, showBorder, progressMode, progressPercent, theme, accentColor, onReset, onOpenSettings, onToggleTheme, onPieceMoved }: Props) {
+export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep, resolution, panStep, knobSize, pieceStyle, pieceSpacing, edgeStyle, showBorder, rippleQuality, progressMode, progressPercent, theme, accentColor, onReset, onOpenSettings, onToggleTheme, onPieceMoved }: Props) {
   const [pieces, setPieces] = useState<PieceData[]>([])
   const [groups, setGroups] = useState<Record<string, string>>({})
   const [solved, setSolved] = useState(false)
+  const [ripple, setRipple] = useState<{ x: number; y: number } | null>(null)
   const [fireworksDark, setFireworksDark] = useState(false)
   const [fireworksReturning, setFireworksReturning] = useState(false)
   const [size, setSize] = useState({ width: window.innerWidth, height: window.innerHeight })
@@ -237,7 +240,34 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
     return () => window.removeEventListener('keydown', handleKey)
   }, [])
 
-  useDebugSolve(setPieces, pieceSizeRef, layoutOriginRef, nodeRefs, setSolved, setFireworksDark)
+  // If the ripple is switched off in settings while one is playing, finish the
+  // solve sequence immediately so the fireworks still arrive
+  useEffect(() => {
+    if (ripple && rippleQuality === 'off') {
+      setRipple(null)
+      setSolved(true)
+      setFireworksDark(true)
+    }
+  }, [rippleQuality, ripple])
+
+  useDebugSolve(setPieces, pieceSizeRef, layoutOriginRef, nodeRefs, triggerSolve)
+
+  // Single entry point for finishing the puzzle, used by both a real drag and
+  // the debug solve. Ripple first if enabled, then the fireworks take over
+  function triggerSolve(placed: PieceData) {
+    if (rippleQuality !== 'off') {
+      const { pw, ph, padding } = pieceSizeRef.current
+      const wx = placed.x + padding + pw / 2
+      const wy = placed.y + padding + ph / 2
+      setRipple({
+        x: wx * zoomRef.current + panRef.current.x,
+        y: wy * zoomRef.current + panRef.current.y,
+      })
+    } else {
+      setSolved(true)
+      setFireworksDark(true)
+    }
+  }
 
   function getGroupIds(id: string, currentGroups: Record<string, string>, currentPieces: PieceData[]) {
     const groupId = currentGroups[id]
@@ -406,7 +436,7 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
       })
 
       setGroups(newGroups)
-      if (next.every(p => p.locked)) { setSolved(true); setFireworksDark(true) }
+      if (next.every(p => p.locked)) triggerSolve(next.find(p => p.id === id)!)
       return next
     })
   }
@@ -533,6 +563,28 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
     setPan(fitPan)
     zoomRef.current = fitZoom
     panRef.current = fitPan
+  }
+
+  // Snapshot of the board (stage plus border overlay) for the ripple to distort.
+  // Resolution follows the ripple quality setting: the snapshot is only seen in
+  // motion, and every ring redraw samples it, so resolution costs frames
+  function captureBoard(): HTMLCanvasElement | null {
+    const stage = stageRef.current
+    if (!stage) return null
+    const maxRatio = rippleQuality === 'low' ? 0.5 : rippleQuality === 'mid' ? 0.75 : 1
+    const dpr = Math.min(window.devicePixelRatio || 1, maxRatio)
+    const snap = document.createElement('canvas')
+    snap.width = size.width * dpr
+    snap.height = size.height * dpr
+    const ctx = snap.getContext('2d')
+    if (!ctx) return null
+    // Fill with the page background so the band fully covers what is beneath
+    ctx.fillStyle = theme === 'dark' ? '#18181b' : '#e8e8e2'
+    ctx.fillRect(0, 0, snap.width, snap.height)
+    ctx.drawImage(stage.toCanvas({ pixelRatio: dpr }), 0, 0, snap.width, snap.height)
+    const border = borderCanvasRef.current
+    if (border) ctx.drawImage(border, 0, 0, snap.width, snap.height)
+    return snap
   }
 
   function resetToInitialFit() {
@@ -686,6 +738,19 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
             </div>
           </div>
         </div>
+      )}
+      {ripple && rippleQuality !== 'off' && (
+        <Ripple
+          x={ripple.x}
+          y={ripple.y}
+          quality={rippleQuality}
+          capture={captureBoard}
+          onDone={() => {
+            setRipple(null)
+            setSolved(true)
+            setFireworksDark(true)
+          }}
+        />
       )}
       {solved && (
         <Fireworks

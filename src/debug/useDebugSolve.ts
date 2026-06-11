@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import type { MutableRefObject } from 'react'
 import type KonvaType from 'konva'
 import type { PieceData } from '../pieces'
@@ -14,9 +14,13 @@ export function useDebugSolve(
   pieceSizeRef: MutableRefObject<{ pw: number; ph: number; padding: number }>,
   layoutOriginRef: MutableRefObject<{ x: number; y: number }>,
   nodeRefs: MutableRefObject<Record<string, KonvaType.Image>>,
-  setSolved: React.Dispatch<React.SetStateAction<boolean>>,
-  setFireworksDark: React.Dispatch<React.SetStateAction<boolean>>
+  onSolved: (lastPlaced: PieceData) => void
 ) {
+  // The listener is bound once, so keep the latest callback in a ref to avoid
+  // a stale closure over settings like the ripple toggle
+  const onSolvedRef = useRef(onSolved)
+  onSolvedRef.current = onSolved
+
   useEffect(() => {
     if (!import.meta.env.DEV) return
 
@@ -29,7 +33,8 @@ export function useDebugSolve(
         const unlocked = prev.filter(p => !p.locked)
         if (unlocked.length === 0) return prev
         const count = Math.max(1, Math.round(prev.length * 0.10))
-        const toPlace = new Set(unlocked.slice(0, count).map(p => p.id))
+        const placedIds = unlocked.slice(0, count).map(p => p.id)
+        const toPlace = new Set(placedIds)
         const next = prev.map(p => {
           if (!toPlace.has(p.id)) return p
           const cx = ox + p.col * pw - padding
@@ -38,7 +43,10 @@ export function useDebugSolve(
           if (node) { node.x(cx); node.y(cy) }
           return { ...p, x: cx, y: cy, locked: true }
         })
-        if (next.every(p => p.locked)) { setSolved(true); setFireworksDark(true) }
+        if (next.every(p => p.locked)) {
+          const lastPlaced = next.find(p => p.id === placedIds[placedIds.length - 1])!
+          onSolvedRef.current(lastPlaced)
+        }
         return next
       })
     }
