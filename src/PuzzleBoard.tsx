@@ -6,6 +6,8 @@ import { generatePieceLayout, renderPiece, calcPieceSize, renderPieceOutline, ty
 import type { ProgressMode, EdgeStyle, RippleQuality } from './SettingsModal'
 import DebugOverlay from './debug/DebugOverlay'
 import { useDebugSolve } from './debug/useDebugSolve'
+import { useDebugActions } from './debug/useDebugActions'
+import type { DebugActions } from './debug/useDebugActions'
 import Fireworks from './animations/Fireworks'
 import Ripple from './animations/Ripple'
 
@@ -30,6 +32,7 @@ interface Props {
   onOpenSettings: () => void
   onToggleTheme: () => void
   onPieceMoved: () => void
+  debugActionsRef?: React.MutableRefObject<DebugActions | null>
 }
 
 // Snap radius scales with piece size but never drops below a fixed number of
@@ -51,7 +54,7 @@ function formatProgress(locked: number, total: number, mode: ProgressMode, showP
   return `${locked}/${total}${pctStr}`
 }
 
-export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep, resolution, panStep, knobSize, pieceStyle, pieceSpacing, edgeStyle, showBorder, rippleQuality, progressMode, progressPercent, theme, accentColor, onReset, onOpenSettings, onToggleTheme, onPieceMoved }: Props) {
+export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep, resolution, panStep, knobSize, pieceStyle, pieceSpacing, edgeStyle, showBorder, rippleQuality, progressMode, progressPercent, theme, accentColor, onReset, onOpenSettings, onToggleTheme, onPieceMoved, debugActionsRef }: Props) {
   const [pieces, setPieces] = useState<PieceData[]>([])
   const [groups, setGroups] = useState<Record<string, string>>({})
   const [solved, setSolved] = useState(false)
@@ -251,6 +254,7 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
   }, [rippleQuality, ripple])
 
   useDebugSolve(setPieces, pieceSizeRef, layoutOriginRef, nodeRefs, triggerSolve)
+  useDebugActions(setPieces, setGroups, pieceSizeRef, layoutOriginRef, nodeRefs, triggerSolve, debugActionsRef)
 
   // Single entry point for finishing the puzzle, used by both a real drag and
   // the debug solve. Ripple first if enabled, then the fireworks take over

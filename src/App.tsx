@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import PuzzleBoard from './PuzzleBoard'
 import SettingsModal, { type Settings, type ProgressMode, type EdgeStyle, type RippleQuality, DEFAULT_SETTINGS } from './SettingsModal'
 import { KNOB_DEFAULT } from './pieces'
+import DebugView from './debug/DebugView'
 import './App.css'
 
 function calcGrid(count: number, aspect: number): { cols: number; rows: number } {
@@ -53,7 +54,7 @@ const QUICK_COUNTS: { n: number; light: string; dark: string }[] = [
 const CUSTOM_LIGHT = '#f78fd4'
 const CUSTOM_DARK  = '#c2255c'
 
-export default function App() {
+function StartScreen({ onDebug }: { onDebug: () => void }) {
   const [imageSrc, setImageSrc] = useState<string | null>(() => {
     try { return localStorage.getItem('zenpiece-image') } catch { return null }
   })
@@ -194,6 +195,10 @@ export default function App() {
           </svg>
           Settings
         </button>
+
+        <button className="top-settings-btn" onClick={onDebug}>
+          Debug
+        </button>
       </div>
 
       <h1>ZenPiece</h1>
@@ -279,4 +284,10 @@ export default function App() {
       )}
     </div>
   )
+}
+
+export default function App() {
+  const [debugMode, setDebugMode] = useState(false)
+  if (debugMode) return <DebugView onExit={() => setDebugMode(false)} />
+  return <StartScreen onDebug={() => setDebugMode(true)} />
 }
