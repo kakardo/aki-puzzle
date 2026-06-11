@@ -30,7 +30,15 @@ interface Props {
   onPieceMoved: () => void
 }
 
-const SNAP_THRESHOLD = 30
+// Snap radius scales with piece size but never drops below a fixed number of
+// screen pixels, so snapping feels the same at every zoom level and piece count
+const SNAP_THRESHOLD_FRAC = 0.16
+const SNAP_MIN_SCREEN_PX = 12
+// Hard cap measured in knobs (padding equals one knob extent): half a knob
+// normally, shrinking to a quarter knob at maximum zoom (16x)
+const SNAP_MAX_KNOB_FRAC = 0.5
+const SNAP_MAX_KNOB_FRAC_MAX_ZOOM = 0.25
+const SNAP_ALIGN_EPSILON = 2
 
 function formatProgress(locked: number, total: number, mode: ProgressMode, showPct: boolean): string {
   if (mode === 'off' || total === 0) return ''
@@ -293,50 +301,95 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
         return p
       })
 
-      const dragged = next.find(p => p.id === id)!
+      const { pw, ph, padding } = pieceSizeRef.current
+      // base radius scales with piece size, floor keeps it usable zoomed out,
+      // hard cap in knob units so a piece never snaps from further than half a
+      // knob away, tightening to a quarter knob at maximum zoom
+      const base = Math.min(pw, ph)
+      const zoomNow = zoomRef.current || 1
+      const zt = Math.min(Math.max(Math.log(zoomNow) / Math.log(16), 0), 1)
+      const knobCap = padding * (SNAP_MAX_KNOB_FRAC - (SNAP_MAX_KNOB_FRAC - SNAP_MAX_KNOB_FRAC_MAX_ZOOM) * zt)
+      const snapThreshold = Math.min(
+        Math.max(base * SNAP_THRESHOLD_FRAC, SNAP_MIN_SCREEN_PX / zoomNow),
+        knobCap
+      )
       let newGroups = { ...currentGroups }
       let snapped = false
 
-      // snap to direct neighbour
-      for (const other of next) {
-        if (groupIds.includes(other.id)) continue
-        const colDiff = Math.abs(other.col - dragged.col)
-        const rowDiff = Math.abs(other.row - dragged.row)
-        if (!((colDiff === 1 && rowDiff === 0) || (colDiff === 0 && rowDiff === 1))) continue
+      // snap to direct neighbour: every piece in the dragged group gets a say,
+      // not just the piece under the cursor, and the closest match wins
+      let best: { shiftX: number; shiftY: number; otherId: string; dist: number } | null = null
+      for (const gid of groupIds) {
+        const gp = next.find(p => p.id === gid)!
+        for (const other of next) {
+          if (groupIds.includes(other.id)) continue
+          const colDiff = Math.abs(other.col - gp.col)
+          const rowDiff = Math.abs(other.row - gp.row)
+          if (!((colDiff === 1 && rowDiff === 0) || (colDiff === 0 && rowDiff === 1))) continue
 
-        const expectedDx = (other.col - dragged.col) * pieceSize.pw
-        const expectedDy = (other.row - dragged.row) * pieceSize.ph
-        const offX = Math.abs((other.x - dragged.x) - expectedDx)
-        const offY = Math.abs((other.y - dragged.y) - expectedDy)
+          const offX = (other.x - gp.x) - (other.col - gp.col) * pw
+          const offY = (other.y - gp.y) - (other.row - gp.row) * ph
+          if (Math.abs(offX) >= snapThreshold || Math.abs(offY) >= snapThreshold) continue
 
-        if (offX < SNAP_THRESHOLD && offY < SNAP_THRESHOLD) {
-          const shiftX = (other.x - expectedDx) - dragged.x
-          const shiftY = (other.y - expectedDy) - dragged.y
-          next = next.map(p =>
-            groupIds.includes(p.id) ? { ...p, x: p.x + shiftX, y: p.y + shiftY } : p
-          )
-          const newGroupId = newGroups[other.id] ?? other.id
-          groupIds.forEach(pid => { newGroups[pid] = newGroupId })
-          newGroups[other.id] = newGroupId
-          getGroupIds(other.id, currentGroups, prevPieces).forEach(pid => { newGroups[pid] = newGroupId })
-          snapped = true
-          break
+          const dist = Math.hypot(offX, offY)
+          if (!best || dist < best.dist) best = { shiftX: offX, shiftY: offY, otherId: other.id, dist }
         }
       }
 
-      // snap to grid: check any piece in the group
+      if (best) {
+        const { shiftX, shiftY, otherId } = best
+        next = next.map(p =>
+          groupIds.includes(p.id) ? { ...p, x: p.x + shiftX, y: p.y + shiftY } : p
+        )
+        const newGroupId = newGroups[otherId] ?? otherId
+        groupIds.forEach(pid => { newGroups[pid] = newGroupId })
+        newGroups[otherId] = newGroupId
+        getGroupIds(otherId, currentGroups, prevPieces).forEach(pid => { newGroups[pid] = newGroupId })
+        snapped = true
+
+        // a drop can land flush against more than one group (e.g. into a
+        // pocket between two assembled sections). Merge everything that now
+        // lines up exactly, repeating until nothing new joins
+        const inMerged = (pid: string) => (newGroups[pid] ?? pid) === newGroupId
+        let changed = true
+        while (changed) {
+          changed = false
+          for (const gp of next) {
+            if (!inMerged(gp.id)) continue
+            for (const other of next) {
+              if (inMerged(other.id)) continue
+              const colDiff = Math.abs(other.col - gp.col)
+              const rowDiff = Math.abs(other.row - gp.row)
+              if (!((colDiff === 1 && rowDiff === 0) || (colDiff === 0 && rowDiff === 1))) continue
+              const offX = (other.x - gp.x) - (other.col - gp.col) * pw
+              const offY = (other.y - gp.y) - (other.row - gp.row) * ph
+              if (Math.abs(offX) < SNAP_ALIGN_EPSILON && Math.abs(offY) < SNAP_ALIGN_EPSILON) {
+                getGroupIds(other.id, newGroups, next).forEach(pid => { newGroups[pid] = newGroupId })
+                newGroups[other.id] = newGroupId
+                changed = true
+              }
+            }
+          }
+        }
+      }
+
+      // snap to grid: every piece in the group is checked, closest match wins
       if (!snapped) {
+        let bestGrid: { shiftX: number; shiftY: number; dist: number } | null = null
         for (const gid of groupIds) {
           const gp = next.find(p => p.id === gid)!
           const { cx, cy } = correctPos(gp.col, gp.row)
-          if (Math.abs(gp.x - cx) < SNAP_THRESHOLD * 2 && Math.abs(gp.y - cy) < SNAP_THRESHOLD * 2) {
-            const shiftX = cx - gp.x
-            const shiftY = cy - gp.y
-            next = next.map(p =>
-              groupIds.includes(p.id) ? { ...p, x: p.x + shiftX, y: p.y + shiftY } : p
-            )
-            break
-          }
+          const offX = cx - gp.x
+          const offY = cy - gp.y
+          if (Math.abs(offX) >= snapThreshold || Math.abs(offY) >= snapThreshold) continue
+          const dist = Math.hypot(offX, offY)
+          if (!bestGrid || dist < bestGrid.dist) bestGrid = { shiftX: offX, shiftY: offY, dist }
+        }
+        if (bestGrid) {
+          const { shiftX, shiftY } = bestGrid
+          next = next.map(p =>
+            groupIds.includes(p.id) ? { ...p, x: p.x + shiftX, y: p.y + shiftY } : p
+          )
         }
       }
 
