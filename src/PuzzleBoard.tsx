@@ -229,7 +229,7 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
     return () => window.removeEventListener('keydown', handleKey)
   }, [])
 
-  useDebugSolve(setPieces, pieceSizeRef, layoutOriginRef, nodeRefs)
+  useDebugSolve(setPieces, pieceSizeRef, layoutOriginRef, nodeRefs, setSolved, setFireworksDark)
 
   function getGroupIds(id: string, currentGroups: Record<string, string>, currentPieces: PieceData[]) {
     const groupId = currentGroups[id]
