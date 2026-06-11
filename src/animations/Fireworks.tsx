@@ -35,7 +35,8 @@ export default function Fireworks({ onFadeOutStart }: { onFadeOutStart: () => vo
     done: false,
   })
 
-  useAnimationLoop((dt) => {
+  useAnimationLoop((rawDt) => {
+    const dt = rawDt * 0.4
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
