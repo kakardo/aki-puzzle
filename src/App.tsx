@@ -60,7 +60,9 @@ export default function App() {
   const [imageAspect, setImageAspect] = useState<number>(() => {
     try { return parseFloat(localStorage.getItem('zenpiece-image-aspect') ?? '1') || 1 } catch { return 1 }
   })
-  const [input, setInput] = useState('300')
+  const [input, setInput] = useState(() => {
+    try { return localStorage.getItem('zenpiece-piece-count') ?? '300' } catch { return '300' }
+  })
   const [grid, setGrid] = useState<{ cols: number; rows: number } | null>(null)
   const [accentColor, setAccentColor] = useState(CUSTOM_DARK)
   const [settings, setSettings] = useState<Settings>(loadSettings)
@@ -76,6 +78,10 @@ export default function App() {
   useEffect(() => {
     try { localStorage.setItem('zenpiece-settings', JSON.stringify(settings)) } catch {}
   }, [settings])
+
+  useEffect(() => {
+    try { localStorage.setItem('zenpiece-piece-count', input) } catch {}
+  }, [input])
 
   const pieceCount = parseInt(input)
   const validCount = !isNaN(pieceCount) && pieceCount >= 2 && pieceCount <= 10000
