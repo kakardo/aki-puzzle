@@ -19,7 +19,7 @@ Open `http://localhost:5173`.
 4. Pieces that connect lock into a group and move together from that point on.
 5. Press `Tab` or use the menu to toggle a full-screen preview of the reference image.
 
-Your image and settings are saved between sessions.
+Your image, piece count, and settings are saved between sessions. If no piece count has been set before, it defaults to 300.
 
 ## Controls
 
