@@ -4,6 +4,7 @@ interface Props {
   onCompleteAll: () => void
   onLeaveOne: () => void
   onReset: () => void
+  onAnimationTest: () => void
   onExit: () => void
 }
 
@@ -45,20 +46,28 @@ const btn: CSSProperties = {
   textAlign: 'left',
 }
 
-const exitBtn: CSSProperties = {
+const animBtn: CSSProperties = {
   ...btn,
   marginTop: '4px',
+  borderColor: 'rgba(192, 132, 252, 0.35)',
+  color: '#c084fc',
+  background: 'rgba(192, 132, 252, 0.06)',
+}
+
+const exitBtn: CSSProperties = {
+  ...btn,
   borderColor: 'rgba(255, 100, 100, 0.35)',
   color: '#ff8787',
   background: 'rgba(255, 100, 100, 0.06)',
 }
 
-const DebugControls: FC<Props> = ({ onCompleteAll, onLeaveOne, onReset, onExit }) => (
+const DebugControls: FC<Props> = ({ onCompleteAll, onLeaveOne, onReset, onAnimationTest, onExit }) => (
   <div style={panel}>
     <div style={label}>Debug</div>
     <button style={btn} onClick={onCompleteAll}>Complete all</button>
     <button style={btn} onClick={onLeaveOne}>Fill &amp; leave one</button>
     <button style={btn} onClick={onReset}>Reset puzzle</button>
+    <button style={animBtn} onClick={onAnimationTest}>Animation test</button>
     <button style={exitBtn} onClick={onExit}>Exit debug</button>
   </div>
 )

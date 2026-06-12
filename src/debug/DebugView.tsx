@@ -2,6 +2,7 @@ import { useRef, useState, useMemo } from 'react'
 import PuzzleBoard from '../PuzzleBoard'
 import SettingsModal, { DEFAULT_SETTINGS, type Settings } from '../SettingsModal'
 import DebugControls from './DebugControls'
+import AnimationTestView from './AnimationTestView'
 import { generateDebugImage } from './debugImage'
 import type { DebugActions } from './useDebugActions'
 
@@ -16,9 +17,12 @@ export default function DebugView({ onExit }: Props) {
   const [settings, setSettings] = useState<Settings>(DEFAULT_SETTINGS)
   const [showSettings, setShowSettings] = useState(false)
   const [boardKey, setBoardKey] = useState(0)
+  const [showAnimTest, setShowAnimTest] = useState(false)
   const actionsRef = useRef<DebugActions | null>(null)
 
   const imageSrc = useMemo(() => generateDebugImage(COLS, ROWS), [])
+
+  if (showAnimTest) return <AnimationTestView onBack={() => setShowAnimTest(false)} />
 
   return (
     <>
@@ -40,7 +44,7 @@ export default function DebugView({ onExit }: Props) {
         progressPercent={settings.progressPercent}
         theme={settings.theme}
         accentColor="#6741d9"
-        onReset={() => setBoardKey(k => k + 1)}
+        onReset={onExit}
         onOpenSettings={() => setShowSettings(true)}
         onToggleTheme={() => setSettings(s => ({ ...s, theme: s.theme === 'light' ? 'dark' : 'light' }))}
         onPieceMoved={() => {}}
@@ -51,6 +55,7 @@ export default function DebugView({ onExit }: Props) {
         onCompleteAll={() => actionsRef.current?.completeAll()}
         onLeaveOne={() => actionsRef.current?.leaveOne()}
         onReset={() => setBoardKey(k => k + 1)}
+        onAnimationTest={() => setShowAnimTest(true)}
         onExit={onExit}
       />
 

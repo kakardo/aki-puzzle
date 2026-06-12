@@ -21,10 +21,35 @@ interface Shell {
   exploded: boolean
 }
 
-const DURATION = 20_000
-const LAUNCH_INTERVAL = 700
+export interface FireworksConfig {
+  duration?: number
+  launchInterval?: number
+  shellSpeedMin?: number
+  shellSpeedMax?: number
+  particleMin?: number
+  particleMax?: number
+  gravity?: number
+  drag?: number
+}
 
-export default function Fireworks({ onFadeOutStart }: { onFadeOutStart: () => void }) {
+interface Props extends FireworksConfig {
+  onFadeOutStart: () => void
+}
+
+export default function Fireworks({
+  onFadeOutStart,
+  duration = 20_000,
+  launchInterval = 700,
+  shellSpeedMin = 12,
+  shellSpeedMax = 20,
+  particleMin = 90,
+  particleMax = 130,
+  gravity = 0.4,
+  drag = 0.97,
+}: Props) {
+  const cfgRef = useRef({ duration, launchInterval, shellSpeedMin, shellSpeedMax, particleMin, particleMax, gravity, drag })
+  cfgRef.current = { duration, launchInterval, shellSpeedMin, shellSpeedMax, particleMin, particleMax, gravity, drag }
+
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const stateRef = useRef({
     particles: [] as Particle[],
@@ -35,6 +60,9 @@ export default function Fireworks({ onFadeOutStart }: { onFadeOutStart: () => vo
     done: false,
   })
 
+  const onFadeOutStartRef = useRef(onFadeOutStart)
+  onFadeOutStartRef.current = onFadeOutStart
+
   useAnimationLoop((rawDt) => {
     const dt = rawDt * 0.4
     const canvas = canvasRef.current
@@ -42,17 +70,18 @@ export default function Fireworks({ onFadeOutStart }: { onFadeOutStart: () => vo
     const ctx = canvas.getContext('2d')
     if (!ctx) return
     const s = stateRef.current
+    const cfg = cfgRef.current
 
     const now = performance.now()
     if (s.startTime === null) s.startTime = now
     s.elapsed = now - s.startTime
-    const launching = s.elapsed < DURATION
+    const launching = s.elapsed < cfg.duration
 
-    if (launching && now - s.lastLaunch >= LAUNCH_INTERVAL) {
+    if (launching && now - s.lastLaunch >= cfg.launchInterval) {
       s.shells.push({
         x: Math.random() * canvas.width * 0.7 + canvas.width * 0.15,
         y: canvas.height,
-        vy: -(Math.random() * 8 + 12),
+        vy: -(Math.random() * (cfg.shellSpeedMax - cfg.shellSpeedMin) + cfg.shellSpeedMin),
         hue: Math.random() * 360,
         exploded: false,
       })
@@ -63,11 +92,11 @@ export default function Fireworks({ onFadeOutStart }: { onFadeOutStart: () => vo
 
     for (let i = s.shells.length - 1; i >= 0; i--) {
       const sh = s.shells[i]
-      sh.vy += 0.4 * dt
+      sh.vy += cfg.gravity * dt
       sh.y += sh.vy * dt
       if (!sh.exploded && sh.vy >= 0) {
         sh.exploded = true
-        const count = 90 + Math.floor(Math.random() * 40)
+        const count = cfg.particleMin + Math.floor(Math.random() * Math.max(1, cfg.particleMax - cfg.particleMin))
         for (let j = 0; j < count; j++) {
           const angle = (j / count) * Math.PI * 2
           const speed = Math.random() * 4 + 1.5
@@ -92,11 +121,11 @@ export default function Fireworks({ onFadeOutStart }: { onFadeOutStart: () => vo
       ctx.fill()
     }
 
-    const drag = Math.pow(0.97, dt)
+    const dragFactor = Math.pow(Math.min(cfg.drag, 0.9999), dt)
     for (let i = s.particles.length - 1; i >= 0; i--) {
       const p = s.particles[i]
-      p.vx *= drag
-      p.vy = p.vy * drag + 0.06 * dt
+      p.vx *= dragFactor
+      p.vy = p.vy * dragFactor + 0.06 * dt
       p.x += p.vx * dt
       p.y += p.vy * dt
       p.alpha -= p.decay * dt
@@ -109,10 +138,10 @@ export default function Fireworks({ onFadeOutStart }: { onFadeOutStart: () => vo
 
     if (!launching && s.shells.length === 0 && s.particles.length === 0 && !s.done) {
       s.done = true
-      onFadeOutStart()
+      onFadeOutStartRef.current()
       return false
     }
-  }, [onFadeOutStart])
+  }, [])
 
   return (
     <canvas

@@ -1,7 +1,17 @@
 import { useRef } from 'react'
 import { useAnimationLoop } from './loop'
 
-interface Props {
+export interface RippleConfig {
+  speed?: number
+  wavelength?: number
+  lead?: number
+  leadSigma?: number
+  tailDecay?: number
+  amplitude?: number
+  fade?: number
+}
+
+interface Props extends RippleConfig {
   /** Epicentre in screen coordinates */
   x: number
   y: number
@@ -10,14 +20,6 @@ interface Props {
   capture: () => HTMLCanvasElement | null
   onDone: () => void
 }
-
-const SPEED = 0.4       // wavefront speed, px per ms
-const WAVELENGTH = 70   // px between crests
-const LEAD = 110        // band ahead of the wavefront
-const LEAD_SIGMA = 45   // sharpness of the leading edge
-const TAIL_DECAY = 230  // how slowly the wake dies off behind the front
-const AMPLITUDE = 24    // max radial displacement in px
-const FADE = 0.00022    // amplitude decay per ms
 
 // ringStep: annulus thickness near the front. tailStep: coarser annuli deep
 // in the wake, where it is smooth. tail: wake length. skip: rings displacing
@@ -34,14 +36,29 @@ const PRESETS = {
  * around the wavefront are redrawn scaled slightly toward or away from the
  * epicentre, which reads as a water ripple passing over the picture.
  */
-export default function Ripple({ x, y, quality, capture, onDone }: Props) {
+export default function Ripple({
+  x, y, quality, capture, onDone,
+  speed = 0.4,
+  wavelength = 70,
+  lead = 110,
+  leadSigma = 45,
+  tailDecay = 230,
+  amplitude = 24,
+  fade = 0.00022,
+}: Props) {
   const { ringStep, tailStep, tail, skip } = PRESETS[quality]
+  const cfgRef = useRef({ speed, wavelength, lead, leadSigma, tailDecay, amplitude, fade })
+  cfgRef.current = { speed, wavelength, lead, leadSigma, tailDecay, amplitude, fade }
+
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const stateRef = useRef({
     snapshot: null as HTMLCanvasElement | null,
     start: null as number | null,
     done: false,
   })
+
+  const onDoneRef = useRef(onDone)
+  onDoneRef.current = onDone
 
   useAnimationLoop(() => {
     const canvas = canvasRef.current
@@ -60,24 +77,25 @@ export default function Ripple({ x, y, quality, capture, onDone }: Props) {
     }
     if (!s.snapshot) {
       s.done = true
-      onDone()
+      onDoneRef.current()
       return false
     }
     const now = performance.now()
+    const cfg = cfgRef.current
 
     const w = window.innerWidth
     const h = window.innerHeight
     const dpr = window.devicePixelRatio || 1
     const elapsed = now - s.start
-    const wavefront = elapsed * SPEED
-    const amp = AMPLITUDE * Math.exp(-elapsed * FADE)
+    const wavefront = elapsed * cfg.speed
+    const amp = cfg.amplitude * Math.exp(-elapsed * cfg.fade)
     const maxDist = Math.hypot(Math.max(x, w - x), Math.max(y, h - y))
 
     if (wavefront - tail > maxDist || amp < 0.4) {
       ctx.setTransform(1, 0, 0, 1, 0, 0)
       ctx.clearRect(0, 0, canvas.width, canvas.height)
       s.done = true
-      onDone()
+      onDoneRef.current()
       return false
     }
 
@@ -88,15 +106,15 @@ export default function Ripple({ x, y, quality, capture, onDone }: Props) {
     // Sharp leading edge ahead of the front, long ringing wake behind it so
     // the ripples stay visible far out across the board
     const inner = Math.max(ringStep, wavefront - tail)
-    const outer = Math.min(wavefront + LEAD, maxDist + LEAD)
+    const outer = Math.min(wavefront + cfg.lead, maxDist + cfg.lead)
     let r = inner
     while (r < outer) {
       const offset = r - wavefront
       const step = offset < -80 ? tailStep : ringStep
-      const phase = (offset / WAVELENGTH) * Math.PI * 2
+      const phase = (offset / cfg.wavelength) * Math.PI * 2
       const falloff = offset > 0
-        ? Math.exp(-(offset * offset) / (2 * LEAD_SIGMA * LEAD_SIGMA))
-        : Math.exp(offset / TAIL_DECAY)
+        ? Math.exp(-(offset * offset) / (2 * cfg.leadSigma * cfg.leadSigma))
+        : Math.exp(offset / cfg.tailDecay)
       const d = amp * Math.sin(phase) * falloff
       if (Math.abs(d) < skip) { r += step; continue }
       const scale = (r + d) / r
@@ -114,12 +132,12 @@ export default function Ripple({ x, y, quality, capture, onDone }: Props) {
     }
 
     // Crest highlight to sell the wave
-    const glow = (amp / AMPLITUDE) * 0.12
+    const glow = (amp / cfg.amplitude) * 0.12
     if (wavefront > 1 && glow > 0.01) {
       ctx.beginPath()
       ctx.arc(x, y, wavefront, 0, Math.PI * 2)
       ctx.strokeStyle = `rgba(255, 255, 255, ${glow})`
-      ctx.lineWidth = WAVELENGTH / 4
+      ctx.lineWidth = cfg.wavelength / 4
       ctx.stroke()
     }
   }, [])
