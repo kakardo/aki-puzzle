@@ -155,6 +155,33 @@ place on the table, so neighbouring pieces are spread across the whole layout
 while the slot pattern itself stays identical. Any leftover pieces beyond the
 last slot fall back to a random point on the stage.
 
+## Multiplayer (local network)
+
+ZenPiece supports co-op puzzle solving over a local network. One person hosts, everyone else joins from the same Wi-Fi.
+
+**Starting a hosted session**
+
+Run the WebSocket server alongside the dev server:
+
+```bash
+npm run server
+```
+
+The terminal will print the local IP address and port to share with other players. Open the app, click **Host**, and the address will also appear in the UI.
+
+**Joining a session**
+
+Open the app on another device on the same network, click **Join**, and type in the host's IP address.
+
+**How it works**
+
+- Piece positions are synced in real time. When any player snaps a piece, everyone sees it snap.
+- A piece being dragged by another player glows in that player's colour so you know to leave it alone.
+- When a new player joins, the current board state is sent to them automatically so they start in sync.
+- When a player disconnects, their highlights clear and the session continues for everyone else.
+
+The server runs on port `8421` by default. If that port is already in use, pass a different one: `node server/index.js 9000`.
+
 ## Tech stack
 
 - React + TypeScript + Vite

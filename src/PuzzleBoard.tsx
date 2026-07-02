@@ -10,6 +10,7 @@ import { useDebugActions } from './debug/useDebugActions'
 import type { DebugActions } from './debug/useDebugActions'
 import Fireworks from './animations/Fireworks'
 import Ripple from './animations/Ripple'
+import type { BoardMultiplayer, RemoteHandlers } from './multiplayer/types'
 
 interface Props {
   imageSrc: string
@@ -33,6 +34,7 @@ interface Props {
   onToggleTheme: () => void
   onPieceMoved: () => void
   debugActionsRef?: React.MutableRefObject<DebugActions | null>
+  multiplayer?: BoardMultiplayer
 }
 
 // Snap radius scales with piece size but never drops below a fixed number of
@@ -54,7 +56,7 @@ function formatProgress(locked: number, total: number, mode: ProgressMode, showP
   return `${locked}/${total}${pctStr}`
 }
 
-export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep, resolution, panStep, knobSize, pieceStyle, pieceSpacing, edgeStyle, showBorder, rippleQuality, progressMode, progressPercent, theme, accentColor, onReset, onOpenSettings, onToggleTheme, onPieceMoved, debugActionsRef }: Props) {
+export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep, resolution, panStep, knobSize, pieceStyle, pieceSpacing, edgeStyle, showBorder, rippleQuality, progressMode, progressPercent, theme, accentColor, onReset, onOpenSettings, onToggleTheme, onPieceMoved, debugActionsRef, multiplayer }: Props) {
   const [pieces, setPieces] = useState<PieceData[]>([])
   const [groups, setGroups] = useState<Record<string, string>>({})
   const [solved, setSolved] = useState(false)
@@ -89,6 +91,18 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
   const pieceSizeRef = useRef({ pw: 120, ph: 120, padding: 20 })
   const groupsRef = useRef(groups)
   const piecesRef = useRef(pieces)
+
+  // Multiplayer. All of this stays in refs: remote drags arrive up to 30
+  // times a second per player and must never cause a render
+  const mpRef = useRef(multiplayer)
+  useEffect(() => { mpRef.current = multiplayer })
+  // pieceId -> holder, drives highlights and drag blocking
+  const remoteHeld = useRef<Record<string, { playerId: string; color: string }>>({})
+  // live positions of remotely dragged pieces; survives re-renders that
+  // would otherwise re-apply stale x/y props to those nodes
+  const remoteLive = useRef<Record<string, { x: number; y: number }>>({})
+  // local drags whose grab the server denied; their dragend commits nothing
+  const deniedDrags = useRef<Set<string>>(new Set())
 
   const zoomRef = useRef(zoom)
   const panRef = useRef(pan)
@@ -149,17 +163,22 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
 
       await new Promise(r => requestAnimationFrame(r))
 
-      // Step 1: fast layout
+      // Step 1: fast layout. In multiplayer every client lays out with the
+      // host's generation viewport, so piece sizes and world coordinates
+      // match across machines; each client still fits its own window below
+      const mp = mpRef.current
+      const genW = mp?.genWidth ?? size.width
+      const genH = mp?.genHeight ?? size.height
       sourceImageRef.current = img
-      const ps = calcPieceSize(img, COLS, ROWS, size.width, size.height, knobSize)
+      const ps = calcPieceSize(img, COLS, ROWS, genW, genH, knobSize)
       setPieceSize(ps)
       pieceSizeRef.current = ps
-      genSizeRef.current = { width: size.width, height: size.height }
+      genSizeRef.current = { width: genW, height: genH }
       setLayoutOrigin({
-        x: (size.width - COLS * ps.pw) / 2,
-        y: (size.height - ROWS * ps.ph) / 2,
+        x: (genW - COLS * ps.pw) / 2,
+        y: (genH - ROWS * ps.ph) / 2,
       })
-      const { pieces: layouts, pw, ph, padding } = generatePieceLayout(img, COLS, ROWS, size.width, size.height, knobSize, pieceSpacing)
+      const { pieces: layouts, pw, ph, padding } = generatePieceLayout(img, COLS, ROWS, genW, genH, knobSize, pieceSpacing, mp?.seed)
       layoutRef.current = layouts
 
       setLoadingSteps([
@@ -190,9 +209,34 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
         }
       }
 
-      setPieces(rendered)
+      // In multiplayer, the session snapshot overrides the fresh scatter:
+      // positions, locked flags, groups, and any drags in flight
+      let finalPieces = rendered
+      remoteLive.current = {}
+      if (mp?.initialPieces) {
+        const byId = new Map(mp.initialPieces.map(p => [p.id, p]))
+        finalPieces = rendered.map(p => {
+          const ip = byId.get(p.id)
+          return ip ? { ...p, x: ip.x, y: ip.y, locked: ip.locked } : p
+        })
+        setGroups(mp.initialGroups)
+        remoteHeld.current = { ...mp.initialHeld }
+      } else {
+        remoteHeld.current = {}
+      }
+
+      setPieces(finalPieces)
       setLoadingSteps([])
-      fitAll(rendered, ps)
+      fitAll(finalPieces, ps)
+
+      // A fresh host board reports its layout so the session can be created
+      if (mp && mp.role === 'host' && !mp.initialPieces) {
+        mp.onGenerated?.(
+          finalPieces.map(p => ({ id: p.id, x: p.x, y: p.y, locked: p.locked })),
+          genW,
+          genH
+        )
+      }
     }
   }, [imageSrc])
 
@@ -253,8 +297,11 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
     }
   }, [rippleQuality, ripple])
 
-  useDebugSolve(setPieces, pieceSizeRef, layoutOriginRef, nodeRefs, triggerSolve)
-  useDebugActions(setPieces, setGroups, pieceSizeRef, layoutOriginRef, nodeRefs, triggerSolve, debugActionsRef)
+  // In multiplayer the debug keys must never mutate state directly (that
+  // would desync everyone); route them through no-ops instead of disabling
+  // the hooks outright, since the hooks themselves stay React-rules-safe
+  useDebugSolve(multiplayer ? () => {} : setPieces, pieceSizeRef, layoutOriginRef, nodeRefs, triggerSolve)
+  useDebugActions(multiplayer ? () => {} : setPieces, multiplayer ? () => {} : setGroups, pieceSizeRef, layoutOriginRef, nodeRefs, triggerSolve, debugActionsRef)
 
   // Single entry point for finishing the puzzle, used by both a real drag and
   // the debug solve. Ripple first if enabled, then the fireworks take over
@@ -287,7 +334,153 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
     }
   }
 
+  // Latest triggerSolve for callbacks that outlive a render (remote drops),
+  // so they never close over a stale ripple setting
+  const triggerSolveRef = useRef<(placed: PieceData) => void>(() => {})
+  triggerSolveRef.current = triggerSolve
+
+  // Clears remote-hold bookkeeping for a set of piece ids and restores their
+  // nodes to the last committed (React state) position. Used when a remote
+  // drag ends without an authoritative drop: a release or a disconnect
+  function restoreRemoteGroup(ids: string[]) {
+    ids.forEach(gid => {
+      delete remoteHeld.current[gid]
+      delete remoteLive.current[gid]
+      const p = piecesRef.current.find(pp => pp.id === gid)
+      const node = nodeRefs.current[gid]
+      if (p && node) {
+        node.x(p.x)
+        node.y(p.y)
+        node.draggable(!p.locked)
+      }
+    })
+    if (ids.length > 0) redrawBordersRef.current()
+  }
+
+  // Everything PuzzleBoard needs in order to react to the other players.
+  // Built once: every value it closes over is a ref or a stable setter, so
+  // it never goes stale and never needs to be rebuilt on render
+  const remoteHandlersRef = useRef<RemoteHandlers>({
+    onRemoteGrab(playerId, color, groupPieceIds) {
+      groupPieceIds.forEach(gid => {
+        remoteHeld.current[gid] = { playerId, color }
+        nodeRefs.current[gid]?.draggable(false)
+      })
+      redrawBordersRef.current()
+    },
+    onRemoteDrag(pieceId, x, y) {
+      const anchorNode = nodeRefs.current[pieceId]
+      const curX = anchorNode ? anchorNode.x() : (remoteLive.current[pieceId]?.x ?? x)
+      const curY = anchorNode ? anchorNode.y() : (remoteLive.current[pieceId]?.y ?? y)
+      const dx = x - curX
+      const dy = y - curY
+      const groupIds = getGroupIds(pieceId, groupsRef.current, piecesRef.current)
+      groupIds.forEach(gid => {
+        const node = nodeRefs.current[gid]
+        const base = node ? { x: node.x(), y: node.y() } : (remoteLive.current[gid] ?? { x, y })
+        const nx = base.x + dx
+        const ny = base.y + dy
+        if (node) { node.x(nx); node.y(ny) }
+        remoteLive.current[gid] = { x: nx, y: ny }
+      })
+      redrawBordersRef.current()
+      stageRef.current?.batchDraw()
+    },
+    onRemoteDrop(patches, groups) {
+      const patchById = new Map(patches.map(p => [p.id, p]))
+      setPieces(prev => {
+        const next = prev.map(p => {
+          const patch = patchById.get(p.id)
+          return patch ? { ...p, x: patch.x, y: patch.y, locked: patch.locked } : p
+        })
+        if (next.every(p => p.locked)) {
+          const lastId = patches[patches.length - 1]?.id
+          triggerSolveRef.current(next.find(p => p.id === lastId) ?? next[next.length - 1])
+        }
+        return next
+      })
+      setGroups(groups)
+      patches.forEach(({ id, x, y, locked }) => {
+        delete remoteHeld.current[id]
+        delete remoteLive.current[id]
+        const node = nodeRefs.current[id]
+        if (node) {
+          node.x(x)
+          node.y(y)
+          if (!locked) node.draggable(true)
+        }
+      })
+      redrawBordersRef.current()
+    },
+    onRemoteRelease(pieceId) {
+      const holder = remoteHeld.current[pieceId]
+      const ids = holder
+        ? Object.keys(remoteHeld.current).filter(k => remoteHeld.current[k].playerId === holder.playerId)
+        : [pieceId]
+      restoreRemoteGroup(ids)
+    },
+    onPlayerLeft(playerId) {
+      const ids = Object.keys(remoteHeld.current).filter(k => remoteHeld.current[k].playerId === playerId)
+      restoreRemoteGroup(ids)
+    },
+    onGrabDenied(pieceId) {
+      const node = nodeRefs.current[pieceId]
+      if (node && node.isDragging()) {
+        deniedDrags.current.add(pieceId)
+        node.stopDrag()
+      }
+    },
+  })
+
+  // Registers the delegating handlers once per mount, and lets the hook
+  // snapshot the live board so the host can restore a session after a
+  // server restart. PuzzleBoard is remounted (via sessionEpoch) on every
+  // new session, so a mount-once effect is the correct lifetime here
+  useEffect(() => {
+    if (!multiplayer) return
+    multiplayer.setRemoteHandlers(remoteHandlersRef.current)
+    multiplayer.setBoardStateProvider(() => ({
+      pieces: piecesRef.current.map(p => ({ id: p.id, x: p.x, y: p.y, locked: p.locked })),
+      groups: groupsRef.current,
+    }))
+    return () => {
+      multiplayer.setRemoteHandlers(null)
+      multiplayer.setBoardStateProvider(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Remote drags move nodes imperatively; any render in between (a player
+  // joining, a drop elsewhere patching state) reapplies the stale x/y state
+  // props to those same nodes, snapping them back. Reassert the live remote
+  // positions after every commit. remoteLive is empty outside a remote drag,
+  // so this is a no-op in solo play
+  useLayoutEffect(() => {
+    const live = remoteLive.current
+    let touched = false
+    for (const id in live) {
+      const node = nodeRefs.current[id]
+      if (node) {
+        node.x(live[id].x)
+        node.y(live[id].y)
+        touched = true
+      }
+    }
+    for (const id in remoteHeld.current) {
+      nodeRefs.current[id]?.draggable(false)
+    }
+    if (touched) stageRef.current?.batchDraw()
+  })
+
   function handleDragStart(id: string, x: number, y: number) {
+    // Pieces held by another player are not draggable; this catches the
+    // race where the pointer goes down before the grab broadcast lands
+    if (remoteHeld.current[id]) {
+      nodeRefs.current[id]?.stopDrag()
+      return
+    }
+    // Optimistic grab: drag immediately, cancel if the server says no
+    mpRef.current?.api.sendGrab(id)
     lastPos.current = { x, y }
     onPieceMoved()
     // bring group to front in state (z-order)
@@ -316,15 +509,34 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
       }
     })
     redrawBordersRef.current()
+    mpRef.current?.api.sendDrag(id, x, y)
   }
 
-  function handleDragEnd(id: string, finalX: number, finalY: number) {
+  function handleDragEnd(id: string, _finalX: number, _finalY: number) {
     lastPos.current = null
-    const currentGroups = groupsRef.current
 
-    // read actual node positions (imperatively updated during drag)
-    setPieces(prevPieces => {
-      const groupIds = getGroupIds(id, currentGroups, prevPieces)
+    // A drag that lost its grab commits nothing: put the group back where
+    // the last committed state has it and let the winner's moves arrive
+    // over the network instead
+    if (deniedDrags.current.has(id) || remoteHeld.current[id]) {
+      deniedDrags.current.delete(id)
+      for (const gid of getGroupIds(id, groupsRef.current, piecesRef.current)) {
+        const p = piecesRef.current.find(pp => pp.id === gid)
+        const node = nodeRefs.current[gid]
+        if (p && node) { node.x(p.x); node.y(p.y) }
+      }
+      redrawBordersRef.current()
+      return
+    }
+
+    const currentGroups = groupsRef.current
+    const prevPieces = piecesRef.current
+    const groupIds = getGroupIds(id, currentGroups, prevPieces)
+
+    // read actual node positions (imperatively updated during drag) and
+    // resolve the drop outside the state updater, so the result can also be
+    // sent to the other players exactly once
+    {
 
       // sync all node positions into state
       let next = prevPieces.map(p => {
@@ -357,6 +569,9 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
         const gp = next.find(p => p.id === gid)!
         for (const other of next) {
           if (groupIds.includes(other.id)) continue
+          // never snap to a piece another player is dragging: its position
+          // here is mid-flight and up to a throttle interval stale
+          if (remoteHeld.current[other.id]) continue
           const colDiff = Math.abs(other.col - gp.col)
           const rowDiff = Math.abs(other.row - gp.row)
           if (!((colDiff === 1 && rowDiff === 0) || (colDiff === 0 && rowDiff === 1))) continue
@@ -392,6 +607,7 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
             if (!inMerged(gp.id)) continue
             for (const other of next) {
               if (inMerged(other.id)) continue
+              if (remoteHeld.current[other.id]) continue
               const colDiff = Math.abs(other.col - gp.col)
               const rowDiff = Math.abs(other.row - gp.row)
               if (!((colDiff === 1 && rowDiff === 0) || (colDiff === 0 && rowDiff === 1))) continue
@@ -440,9 +656,16 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
       })
 
       setGroups(newGroups)
+      setPieces(next)
       if (next.every(p => p.locked)) triggerSolve(next.find(p => p.id === id)!)
-      return next
-    })
+
+      if (mpRef.current) {
+        const moved = next
+          .filter(p => groupIds.includes(p.id))
+          .map(p => ({ id: p.id, x: p.x, y: p.y, locked: p.locked }))
+        mpRef.current.api.sendDrop(id, moved, newGroups)
+      }
+    }
   }
 
   const originX = layoutOrigin.x
@@ -460,20 +683,22 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
     const ctx = canvas.getContext('2d')!
     const dpr = window.devicePixelRatio || 1
     ctx.clearRect(0, 0, canvas.width, canvas.height)
-    if (!showBorder || pieces.length === 0) return
+    if (pieces.length === 0) return
     const { pw, ph, padding } = pieceSize
     ctx.save()
     ctx.scale(dpr, dpr)
     ctx.translate(pan.x, pan.y)
     ctx.scale(zoom, zoom)
-    ctx.strokeStyle = 'rgba(0,0,0,0.55)'
-    ctx.lineWidth = 1 / zoom
     // Mirror the stage stacking: locked pieces sit in a lower layer, unlocked
     // pieces render in array order (the dragged group is moved to the end).
     // Before stroking a piece, punch out any lines already drawn beneath its
     // body so outlines of covered pieces never bleed through the one on top.
+    // Remote-held pieces get their highlight drawn even when showBorder is
+    // off; every other piece is skipped entirely in that case.
     const ordered = [...pieces.filter(p => p.locked), ...pieces.filter(p => !p.locked)]
     for (const p of ordered) {
+      const held = remoteHeld.current[p.id]
+      if (!showBorder && !held) continue
       const node = nodeRefs.current[p.id]
       const nx = node ? node.x() : p.x
       const ny = node ? node.y() : p.y
@@ -483,6 +708,16 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
       ctx.globalCompositeOperation = 'destination-out'
       ctx.fill()
       ctx.globalCompositeOperation = 'source-over'
+      if (held) {
+        ctx.strokeStyle = held.color
+        ctx.lineWidth = 2.5 / zoom
+        ctx.shadowColor = held.color
+        ctx.shadowBlur = 12
+      } else {
+        ctx.strokeStyle = 'rgba(0,0,0,0.55)'
+        ctx.lineWidth = 1 / zoom
+        ctx.shadowBlur = 0
+      }
       ctx.stroke()
       ctx.restore()
     }
@@ -497,19 +732,19 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
     const ctx = canvas.getContext('2d')!
     const dpr = window.devicePixelRatio || 1
     ctx.clearRect(0, 0, canvas.width, canvas.height)
-    if (!showBorder) return
     const { pw, ph, padding } = pieceSizeRef.current
     ctx.save()
     ctx.scale(dpr, dpr)
     ctx.translate(panRef.current.x, panRef.current.y)
     ctx.scale(zoomRef.current, zoomRef.current)
-    ctx.strokeStyle = 'rgba(0,0,0,0.55)'
-    ctx.lineWidth = 1 / zoomRef.current
     // Same stacking-aware draw as the reactive effect above: erase lines under
-    // each piece body, then stroke its own outline, in z-order.
+    // each piece body, then stroke its own outline, in z-order. Remote-held
+    // pieces draw their highlight even when showBorder is off.
     const all = piecesRef.current
     const ordered = [...all.filter(p => p.locked), ...all.filter(p => !p.locked)]
     for (const p of ordered) {
+      const held = remoteHeld.current[p.id]
+      if (!showBorder && !held) continue
       const node = nodeRefs.current[p.id]
       const nx = node ? node.x() : p.x
       const ny = node ? node.y() : p.y
@@ -519,6 +754,16 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
       ctx.globalCompositeOperation = 'destination-out'
       ctx.fill()
       ctx.globalCompositeOperation = 'source-over'
+      if (held) {
+        ctx.strokeStyle = held.color
+        ctx.lineWidth = 2.5 / zoomRef.current
+        ctx.shadowColor = held.color
+        ctx.shadowBlur = 12
+      } else {
+        ctx.strokeStyle = 'rgba(0,0,0,0.55)'
+        ctx.lineWidth = 1 / zoomRef.current
+        ctx.shadowBlur = 0
+      }
       ctx.stroke()
       ctx.restore()
     }

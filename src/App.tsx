@@ -1,8 +1,12 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import PuzzleBoard from './PuzzleBoard'
 import SettingsModal, { type Settings, type ProgressMode, type EdgeStyle, type RippleQuality, DEFAULT_SETTINGS } from './SettingsModal'
 import { KNOB_DEFAULT } from './pieces'
 import DebugView from './debug/DebugView'
+import { useMultiplayer, type MultiplayerStatus, type MultiplayerMode } from './hooks/useMultiplayer'
+import { prepareNetImage } from './multiplayer/image'
+import type { BoardMultiplayer } from './multiplayer/types'
+import type { NetSession, Player } from './multiplayer/protocol'
 import './App.css'
 
 function calcGrid(count: number, aspect: number): { cols: number; rows: number } {
@@ -54,6 +58,48 @@ const QUICK_COUNTS: { n: number; light: string; dark: string }[] = [
 const CUSTOM_LIGHT = '#f78fd4'
 const CUSTOM_DARK  = '#c2255c'
 
+// Player chips shown above the canvas while a multiplayer session is active.
+// Plain DOM, not Konva, so it can sit outside the board entirely.
+function PlayerOverlay({
+  players,
+  selfId,
+  status,
+  mode,
+  lanAddresses,
+  onRejoin,
+}: {
+  players: Player[]
+  selfId: string | null
+  status: MultiplayerStatus
+  mode: MultiplayerMode
+  lanAddresses: string[]
+  onRejoin: () => void
+}) {
+  return (
+    <div className="mp-overlay">
+      {mode === 'host' && lanAddresses.length > 0 && (
+        <div className="mp-address-banner">Friends join with: {lanAddresses.join(' or ')}</div>
+      )}
+      <div className="mp-chip-row">
+        {players.map(p => (
+          <div key={p.id} className="mp-chip" style={{ borderColor: p.color }}>
+            <span className="mp-chip-dot" style={{ background: p.color }} />
+            <span className="mp-chip-name">{p.name}{p.id === selfId ? ' (you)' : ''}</span>
+          </div>
+        ))}
+        {status !== 'connected' && status !== 'idle' && (
+          <span className={`mp-status-pill${status === 'failed' ? ' mp-status-pill--error' : ''}`}>
+            {status === 'reconnecting' ? 'Reconnecting...' : status === 'failed' ? 'Disconnected' : 'Connecting...'}
+            {status === 'failed' && (
+              <button className="mp-rejoin-btn" onClick={onRejoin}>Rejoin</button>
+            )}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
 function StartScreen({ onDebug }: { onDebug: () => void }) {
   const [imageSrc, setImageSrc] = useState<string | null>(() => {
     try { return localStorage.getItem('zenpiece-image') } catch { return null }
@@ -70,6 +116,20 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
   const [showSettings, setShowSettings] = useState(false)
   const [puzzleHasProgress, setPuzzleHasProgress] = useState(false)
 
+  // Multiplayer
+  const mp = useMultiplayer()
+  const [mpPanel, setMpPanel] = useState<'none' | 'host' | 'join'>('none')
+  const [mpName, setMpName] = useState('')
+  const [mpJoinAddress, setMpJoinAddress] = useState('')
+  const [mpStarting, setMpStarting] = useState(false)
+  const [mpStartError, setMpStartError] = useState<string | null>(null)
+  // Re-encoded image the host actually plays with, so every client cuts
+  // pieces from pixel identical source data (see multiplayer/image.ts)
+  const [hostNetImage, setHostNetImage] = useState<string | null>(null)
+  const hostSeedRef = useRef(0)
+  const prevPlayersRef = useRef<Player[]>([])
+  const [toast, setToast] = useState<string | null>(null)
+
   const { theme } = settings
 
   useEffect(() => {
@@ -83,6 +143,25 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
   useEffect(() => {
     try { localStorage.setItem('zenpiece-piece-count', input) } catch {}
   }, [input])
+
+  // Joins/leaves get a brief toast. Diffed against the previous players list
+  // since the server only ever sends the current roster, not deltas.
+  useEffect(() => {
+    const prev = prevPlayersRef.current
+    const prevIds = new Set(prev.map(p => p.id))
+    const curIds = new Set(mp.players.map(p => p.id))
+    const joined = mp.players.find(p => !prevIds.has(p.id) && p.id !== mp.selfId)
+    const left = prev.find(p => !curIds.has(p.id) && p.id !== mp.selfId)
+    if (joined) setToast(`${joined.name} joined`)
+    else if (left) setToast(`${left.name} left`)
+    prevPlayersRef.current = mp.players
+  }, [mp.players, mp.selfId])
+
+  useEffect(() => {
+    if (!toast) return
+    const t = setTimeout(() => setToast(null), 3000)
+    return () => clearTimeout(t)
+  }, [toast])
 
   const pieceCount = parseInt(input)
   const validCount = !isNaN(pieceCount) && pieceCount >= 2 && pieceCount <= 10000
@@ -128,31 +207,194 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
     setGrid(calcGrid(pieceCount, imageAspect))
   }
 
-  if (grid && imageSrc) {
+  async function handleHostStart() {
+    if (!imageSrc || !validCount) return
+    setMpStartError(null)
+    setMpStarting(true)
+    try {
+      const netImage = await prepareNetImage(imageSrc)
+      hostSeedRef.current = Date.now() >>> 0
+      await mp.host(mpName.trim() || 'Host')
+      setHostNetImage(netImage)
+      setAccentColor(matchedQuick ? matchedQuick.dark : CUSTOM_DARK)
+      setPuzzleHasProgress(false)
+      setGrid(calcGrid(pieceCount, imageAspect))
+    } catch {
+      setMpStartError('Could not reach the server. Run "npm run server" first, then try again.')
+    } finally {
+      setMpStarting(false)
+    }
+  }
+
+  async function handleJoinStart() {
+    if (!mpJoinAddress.trim()) return
+    setMpStartError(null)
+    setMpStarting(true)
+    try {
+      await mp.join(mpName.trim() || 'Player', mpJoinAddress.trim())
+    } catch {
+      setMpStartError('Could not reach that address. Check it and that the host is running.')
+    } finally {
+      setMpStarting(false)
+    }
+  }
+
+  function handleRejoin() {
+    if (mp.mode === 'host') {
+      mp.host(mpName.trim() || 'Host')
+    } else {
+      handleJoinStart()
+    }
+  }
+
+  function handleLeaveBoard() {
+    if (mp.mode !== 'solo') {
+      mp.leave()
+      setHostNetImage(null)
+    }
+    setMpPanel('none')
+    setGrid(null)
+  }
+
+  function buildHostMultiplayer(): BoardMultiplayer {
+    return {
+      role: 'host',
+      seed: hostSeedRef.current,
+      genWidth: null,
+      genHeight: null,
+      initialPieces: null,
+      initialGroups: {},
+      initialHeld: {},
+      api: mp.api,
+      setRemoteHandlers: mp.setRemoteHandlers,
+      setBoardStateProvider: mp.setBoardStateProvider,
+      onGenerated: (pieces, genWidth, genHeight) => {
+        if (!hostNetImage || !grid) return
+        mp.createSession(
+          {
+            imageDataUrl: hostNetImage,
+            cols: grid.cols,
+            rows: grid.rows,
+            seed: hostSeedRef.current,
+            knobSize: settings.knobSize,
+            pieceStyle: settings.pieceStyle,
+            pieceSpacing: settings.pieceSpacing,
+            edgeStyle: settings.edgeStyle,
+            genWidth,
+            genHeight,
+          },
+          pieces,
+          {}
+        )
+      },
+    }
+  }
+
+  function buildGuestMultiplayer(session: NetSession): BoardMultiplayer {
+    // Expand the server's groupId -> playerId lock map into a pieceId keyed
+    // map, so pieces already held when this client joins highlight at once
+    const initialHeld: Record<string, { playerId: string; color: string }> = {}
+    for (const piece of session.pieces) {
+      const root = session.groups[piece.id] ?? piece.id
+      const holderId = session.heldGroups[root]
+      if (!holderId) continue
+      const color = mp.players.find(p => p.id === holderId)?.color ?? '#888'
+      initialHeld[piece.id] = { playerId: holderId, color }
+    }
+    return {
+      role: 'guest',
+      seed: session.config.seed,
+      genWidth: session.config.genWidth,
+      genHeight: session.config.genHeight,
+      initialPieces: session.pieces,
+      initialGroups: session.groups,
+      initialHeld,
+      api: mp.api,
+      setRemoteHandlers: mp.setRemoteHandlers,
+      setBoardStateProvider: mp.setBoardStateProvider,
+    }
+  }
+
+  // Guests never see the image picker: the whole screen is either "waiting
+  // for the host" or the board itself, driven entirely by the session
+  if (mp.mode === 'guest' && !mp.session) {
+    return (
+      <div className="mp-waiting-screen">
+        <h1>ZenPiece</h1>
+        <p className="mp-waiting-text">
+          {mp.status === 'failed'
+            ? (mp.errorMessage ?? 'Could not connect.')
+            : 'Waiting for the host to start a puzzle...'}
+        </p>
+        {mp.players.length > 0 && (
+          <PlayerOverlay
+            players={mp.players}
+            selfId={mp.selfId}
+            status={mp.status}
+            mode={mp.mode}
+            lanAddresses={mp.lanAddresses}
+            onRejoin={handleRejoin}
+          />
+        )}
+        {toast && <div className="mp-toast">{toast}</div>}
+        <button className="mp-cancel-btn" onClick={() => { mp.leave(); setMpPanel('none') }}>Leave</button>
+      </div>
+    )
+  }
+
+  const isGuestBoard = mp.mode === 'guest' && mp.session !== null
+  const isHostBoard = mp.mode === 'host' && grid !== null && hostNetImage !== null
+  const isSoloBoard = mp.mode === 'solo' && grid !== null && imageSrc !== null
+
+  if (isGuestBoard || isHostBoard || isSoloBoard) {
+    const session = mp.session
+    const boardImageSrc = isGuestBoard ? session!.config.imageDataUrl : (isHostBoard ? hostNetImage! : imageSrc!)
+    const boardCols = isGuestBoard ? session!.config.cols : grid!.cols
+    const boardRows = isGuestBoard ? session!.config.rows : grid!.rows
+    const boardKnobSize = isGuestBoard ? session!.config.knobSize : settings.knobSize
+    const boardPieceStyle = isGuestBoard ? session!.config.pieceStyle : settings.pieceStyle
+    const boardPieceSpacing = isGuestBoard ? session!.config.pieceSpacing : settings.pieceSpacing
+    const boardEdgeStyle = (isGuestBoard ? session!.config.edgeStyle : settings.edgeStyle) as EdgeStyle
+    const multiplayerProp: BoardMultiplayer | undefined =
+      isHostBoard ? buildHostMultiplayer() : (isGuestBoard ? buildGuestMultiplayer(session!) : undefined)
+
     return (
       <>
         <PuzzleBoard
-          imageSrc={imageSrc}
-          cols={grid.cols}
-          rows={grid.rows}
+          key={isGuestBoard ? `guest-${mp.sessionEpoch}` : 'local'}
+          imageSrc={boardImageSrc}
+          cols={boardCols}
+          rows={boardRows}
           zoomStep={settings.zoomStep}
           resolution={settings.resolution}
           panStep={settings.panStep}
-          knobSize={settings.knobSize}
-          pieceStyle={settings.pieceStyle}
-          pieceSpacing={settings.pieceSpacing}
-          edgeStyle={settings.edgeStyle}
+          knobSize={boardKnobSize}
+          pieceStyle={boardPieceStyle}
+          pieceSpacing={boardPieceSpacing}
+          edgeStyle={boardEdgeStyle}
           showBorder={settings.showBorder}
           rippleQuality={settings.rippleQuality}
           progressMode={settings.progressMode}
           progressPercent={settings.progressPercent}
           theme={settings.theme}
           accentColor={accentColor}
-          onReset={() => setGrid(null)}
+          onReset={handleLeaveBoard}
           onOpenSettings={() => setShowSettings(true)}
           onToggleTheme={() => setSettings(s => ({ ...s, theme: s.theme === 'light' ? 'dark' : 'light' }))}
           onPieceMoved={() => setPuzzleHasProgress(true)}
+          multiplayer={multiplayerProp}
         />
+        {mp.mode !== 'solo' && (
+          <PlayerOverlay
+            players={mp.players}
+            selfId={mp.selfId}
+            status={mp.status}
+            mode={mp.mode}
+            lanAddresses={mp.lanAddresses}
+            onRejoin={handleRejoin}
+          />
+        )}
+        {toast && <div className="mp-toast">{toast}</div>}
         {showSettings && (
           <SettingsModal
             settings={settings}
@@ -267,11 +509,69 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
         </div>
       </div>
 
-      {imageSrc && (
+      {imageSrc && mpPanel === 'none' && (
         <div className="start-section start-actions">
           <button className="start-btn" disabled={!canStart} onClick={handleStart}>
             Start puzzling
           </button>
+        </div>
+      )}
+
+      {canStart && (
+        <div className="start-section mp-section">
+          {mpPanel === 'none' && (
+            <div className="mp-toggle-row">
+              <span className="mp-toggle-label">or play together</span>
+              <button className="mp-toggle-btn" onClick={() => setMpPanel('host')}>Host</button>
+              <button className="mp-toggle-btn" onClick={() => setMpPanel('join')}>Join</button>
+            </div>
+          )}
+
+          {mpPanel === 'host' && (
+            <div className="mp-panel">
+              <p className="mp-panel-hint">Run <code>npm run server</code> in the project folder, then press Start.</p>
+              <input
+                className="mp-name-input"
+                type="text"
+                placeholder="Your name"
+                value={mpName}
+                onChange={e => setMpName(e.target.value)}
+              />
+              {mpStartError && <p className="mp-error">{mpStartError}</p>}
+              <div className="mp-panel-actions">
+                <button className="mp-cancel-btn" onClick={() => { setMpPanel('none'); setMpStartError(null) }}>Cancel</button>
+                <button className="mp-start-btn" disabled={mpStarting} onClick={handleHostStart}>
+                  {mpStarting ? 'Starting...' : 'Start'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {mpPanel === 'join' && (
+            <div className="mp-panel">
+              <input
+                className="mp-name-input"
+                type="text"
+                placeholder="Your name"
+                value={mpName}
+                onChange={e => setMpName(e.target.value)}
+              />
+              <input
+                className="mp-address-input"
+                type="text"
+                placeholder="Host address, e.g. 192.168.1.23"
+                value={mpJoinAddress}
+                onChange={e => setMpJoinAddress(e.target.value)}
+              />
+              {mpStartError && <p className="mp-error">{mpStartError}</p>}
+              <div className="mp-panel-actions">
+                <button className="mp-cancel-btn" onClick={() => { setMpPanel('none'); setMpStartError(null) }}>Cancel</button>
+                <button className="mp-start-btn" disabled={mpStarting || !mpJoinAddress.trim()} onClick={handleJoinStart}>
+                  {mpStarting ? 'Joining...' : 'Join'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

@@ -670,3 +670,253 @@ kbd {
   color: #2f9e44;
 }
 
+/* Multiplayer: host/join toggle and forms on the start screen */
+
+.mp-section {
+  gap: 0.5rem;
+}
+
+.mp-toggle-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.mp-toggle-label {
+  font-size: 0.8rem;
+  color: var(--subtle);
+}
+
+.mp-toggle-btn {
+  padding: 0.4rem 1rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.85rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.1s, border-color 0.15s;
+}
+
+.mp-toggle-btn:hover {
+  background: var(--hover);
+  border-color: var(--accent);
+}
+
+.mp-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.6rem;
+  width: 260px;
+  padding: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+}
+
+.mp-panel-hint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--subtle);
+  line-height: 1.4;
+}
+
+.mp-panel-hint code {
+  background: var(--hover);
+  border-radius: 4px;
+  padding: 0.05rem 0.35rem;
+  font-size: 0.78rem;
+}
+
+.mp-name-input,
+.mp-address-input {
+  width: 100%;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.9rem;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  outline: none;
+  background: var(--bg);
+  color: var(--text);
+  box-sizing: border-box;
+}
+
+.mp-name-input:focus,
+.mp-address-input:focus {
+  border-color: var(--accent);
+}
+
+.mp-error {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #c0392b;
+}
+
+.mp-panel-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.mp-cancel-btn {
+  padding: 0.45rem 1rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  transition: opacity 0.15s;
+}
+
+.mp-cancel-btn:hover {
+  opacity: 0.8;
+}
+
+.mp-start-btn {
+  padding: 0.45rem 1.1rem;
+  border-radius: 6px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  transition: opacity 0.15s;
+}
+
+:root[data-theme="light"] .mp-start-btn {
+  color: #1a1a1a;
+}
+
+.mp-start-btn:hover:not(:disabled) {
+  opacity: 0.88;
+}
+
+.mp-start-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* Multiplayer: waiting-for-host screen (guest, no session yet) */
+
+.mp-waiting-screen {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  gap: 1.5rem;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.mp-waiting-text {
+  font-size: 0.95rem;
+  color: var(--subtle);
+  max-width: 340px;
+  text-align: center;
+  margin: 0;
+}
+
+/* Multiplayer: in-puzzle player overlay, address banner and toast */
+
+.mp-overlay {
+  position: fixed;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  pointer-events: none;
+}
+
+.mp-address-banner {
+  padding: 0.35rem 0.9rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.78rem;
+  color: var(--subtle);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  pointer-events: auto;
+}
+
+.mp-chip-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.mp-chip {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.7rem;
+  background: var(--surface);
+  border: 1.5px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.8rem;
+  color: var(--text);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+  pointer-events: auto;
+}
+
+.mp-chip-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.mp-status-pill {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.7rem;
+  background: var(--surface);
+  border: 1.5px solid #e8a23d;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  color: #e8a23d;
+  pointer-events: auto;
+}
+
+.mp-status-pill--error {
+  border-color: #c0392b;
+  color: #c0392b;
+}
+
+.mp-rejoin-btn {
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  border: none;
+  background: #c0392b;
+  color: #fff;
+  font-size: 0.72rem;
+  cursor: pointer;
+}
+
+.mp-toast {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 25;
+  padding: 0.5rem 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.85rem;
+  color: var(--text);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+}
+

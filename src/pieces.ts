@@ -232,7 +232,24 @@ export function calcPieceSize(
   return { pw, ph, padding }
 }
 
+// Small seeded PRNG (mulberry32). Multiplayer needs every client to cut
+// geometrically identical pieces from the same seed; integer-based, so the
+// sequence is bit-identical across machines.
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0
+  return function () {
+    a = (a + 0x6d2b79f5) | 0
+    let t = Math.imul(a ^ (a >>> 15), a | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
 // Phase 1: fast. Compute positions, slots, and tab shapes. No canvas work.
+// When a seed is given, tab directions and wave seeds come from a seeded PRNG
+// so two clients generate identical geometry. The shuffle and scatter stay
+// unseeded on purpose: in multiplayer the actual positions arrive with the
+// session snapshot, so only the shapes have to match.
 export function generatePieceLayout(
   image: HTMLImageElement,
   cols: number,
@@ -240,7 +257,8 @@ export function generatePieceLayout(
   stageWidth: number,
   stageHeight: number,
   knobSize = 100,
-  gap = 8
+  gap = 8,
+  seed?: number
 ): { pieces: Omit<PieceData, 'imageDataUrl' | 'displayW' | 'displayH'>[], pw: number; ph: number; padding: number } {
   const { pw, ph, padding } = calcPieceSize(image, cols, rows, stageWidth, stageHeight, knobSize)
   const slotW = pw + padding * 2 + gap
@@ -453,15 +471,16 @@ export function generatePieceLayout(
   for (const s of orderedSlots) if (usedSlots.has(s)) slots.push({ x: s.x, y: s.y })
   for (const s of orderedSlots) if (!usedSlots.has(s)) slots.push({ x: s.x, y: s.y })
 
+  const rand = seed === undefined ? Math.random : mulberry32(seed)
   const tabGrid: number[][][] = []
   for (let r = 0; r <= rows; r++) {
     tabGrid[r] = []
     for (let c = 0; c <= cols; c++) {
       tabGrid[r][c] = [
-        Math.random() < 0.5 ? 1 : -1, // vertical tab direction
-        Math.random() < 0.5 ? 1 : -1, // horizontal tab direction
-        Math.random() * 2 - 1,         // vertical edge wave seed
-        Math.random() * 2 - 1,         // horizontal edge wave seed
+        rand() < 0.5 ? 1 : -1, // vertical tab direction
+        rand() < 0.5 ? 1 : -1, // horizontal tab direction
+        rand() * 2 - 1,         // vertical edge wave seed
+        rand() * 2 - 1,         // horizontal edge wave seed
       ]
     }
   }
