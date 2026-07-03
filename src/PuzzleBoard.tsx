@@ -11,6 +11,7 @@ import type { DebugActions } from './debug/useDebugActions'
 import Fireworks from './animations/Fireworks'
 import Ripple from './animations/Ripple'
 import type { BoardMultiplayer, RemoteHandlers } from './multiplayer/types'
+import type { StatsHooks } from './stats/types'
 
 interface Props {
   imageSrc: string
@@ -31,10 +32,13 @@ interface Props {
   accentColor: string
   onReset: () => void
   onOpenSettings: () => void
+  onOpenStats?: () => void
   onToggleTheme: () => void
   onPieceMoved: () => void
   debugActionsRef?: React.MutableRefObject<DebugActions | null>
   multiplayer?: BoardMultiplayer
+  statsHooks?: StatsHooks
+  coPlayerNames?: string[]
 }
 
 // Snap radius scales with piece size but never drops below a fixed number of
@@ -56,7 +60,7 @@ function formatProgress(locked: number, total: number, mode: ProgressMode, showP
   return `${locked}/${total}${pctStr}`
 }
 
-export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep, resolution, panStep, knobSize, pieceStyle, pieceSpacing, edgeStyle, showBorder, rippleQuality, progressMode, progressPercent, theme, accentColor, onReset, onOpenSettings, onToggleTheme, onPieceMoved, debugActionsRef, multiplayer }: Props) {
+export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep, resolution, panStep, knobSize, pieceStyle, pieceSpacing, edgeStyle, showBorder, rippleQuality, progressMode, progressPercent, theme, accentColor, onReset, onOpenSettings, onOpenStats, onToggleTheme, onPieceMoved, debugActionsRef, multiplayer, statsHooks, coPlayerNames }: Props) {
   const [pieces, setPieces] = useState<PieceData[]>([])
   const [groups, setGroups] = useState<Record<string, string>>({})
   const [solved, setSolved] = useState(false)
@@ -103,6 +107,12 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
   const remoteLive = useRef<Record<string, { x: number; y: number }>>({})
   // local drags whose grab the server denied; their dragend commits nothing
   const deniedDrags = useRef<Set<string>>(new Set())
+
+  // Stats bookkeeping for the puzzle attempt currently on screen. Reset
+  // whenever a fresh puzzle is generated (see the [imageSrc] effect below).
+  const statsSessionIdRef = useRef<string | null>(null)
+  const chainMergeMaxRef = useRef(0)
+  const statsCompletedRef = useRef(false)
 
   const zoomRef = useRef(zoom)
   const panRef = useRef(pan)
@@ -228,6 +238,11 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
       setPieces(finalPieces)
       setLoadingSteps([])
       fitAll(finalPieces, ps)
+
+      // A fresh stats session per puzzle attempt, solo or multiplayer alike
+      chainMergeMaxRef.current = 0
+      statsCompletedRef.current = false
+      statsSessionIdRef.current = statsHooks?.startSession(total, COLS, ROWS, mp ? 'multiplayer' : 'solo') ?? null
 
       // A fresh host board reports its layout so the session can be created
       if (mp && mp.role === 'host' && !mp.initialPieces) {
@@ -526,6 +541,7 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
         if (p && node) { node.x(p.x); node.y(p.y) }
       }
       redrawBordersRef.current()
+      if (statsSessionIdRef.current) statsHooks?.onPickupNotPlaced(statsSessionIdRef.current)
       return
     }
 
@@ -643,11 +659,20 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
         }
       }
 
+      // Track the biggest chain merge seen this puzzle: total size of the
+      // cluster resulting from this drop, after any neighbour snap and
+      // cascade above. Counts the placed pieces themselves as well as
+      // whatever they connected to, not just the growth.
+      const finalGroupSize = getGroupIds(id, newGroups, next).length
+      if (finalGroupSize > chainMergeMaxRef.current) chainMergeMaxRef.current = finalGroupSize
+
       // lock pieces in correct position
+      const beforeLock = next
       next = next.map(p => {
         const { cx, cy } = correctPos(p.col, p.row)
         return Math.abs(p.x - cx) < 2 && Math.abs(p.y - cy) < 2 ? { ...p, locked: true } : p
       })
+      const newlyLocked = next.filter((p, i) => p.locked && !beforeLock[i].locked).length
 
       // sync final positions back to nodes
       next.forEach(p => {
@@ -657,7 +682,19 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
 
       setGroups(newGroups)
       setPieces(next)
-      if (next.every(p => p.locked)) triggerSolve(next.find(p => p.id === id)!)
+
+      if (statsSessionIdRef.current) {
+        if (newlyLocked > 0) statsHooks?.onPiecesPlaced(statsSessionIdRef.current, newlyLocked)
+        else statsHooks?.onPickupNotPlaced(statsSessionIdRef.current)
+      }
+
+      if (next.every(p => p.locked)) {
+        triggerSolve(next.find(p => p.id === id)!)
+        if (statsSessionIdRef.current && !statsCompletedRef.current) {
+          statsCompletedRef.current = true
+          statsHooks?.completeSession(statsSessionIdRef.current, chainMergeMaxRef.current, coPlayerNames ?? [])
+        }
+      }
 
       if (mpRef.current) {
         const moved = next
@@ -887,6 +924,13 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
     redrawBordersRef.current()
   }
 
+  function handleLeave() {
+    if (statsSessionIdRef.current && !statsCompletedRef.current) {
+      statsHooks?.abandonSession(statsSessionIdRef.current)
+    }
+    onReset()
+  }
+
   function handleStageMouseUp() {
     if (isPanning.current) {
       // Commit the final pan to state once, so React and the refs agree.
@@ -945,6 +989,11 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
               <button className="dropdown-item" onClick={() => { onOpenSettings(); setMenuOpen(false) }}>
                 Settings
               </button>
+              {onOpenStats && (
+                <button className="dropdown-item" onClick={() => { onOpenStats(); setMenuOpen(false) }}>
+                  Stats
+                </button>
+              )}
               <div className="dropdown-divider" />
               <button className="dropdown-item dropdown-item--danger" onClick={() => { setConfirmLeave(true); setMenuOpen(false) }}>
                 Back to front page
@@ -983,7 +1032,7 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
             <p className="confirm-text">Leave this puzzle? Your progress will be lost.</p>
             <div className="confirm-actions">
               <button className="confirm-btn confirm-btn--cancel" onClick={() => setConfirmLeave(false)}>Keep playing</button>
-              <button className="confirm-btn confirm-btn--danger" onClick={onReset}>Leave</button>
+              <button className="confirm-btn confirm-btn--danger" onClick={handleLeave}>Leave</button>
             </div>
           </div>
         </div>

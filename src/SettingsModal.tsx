@@ -15,6 +15,7 @@ export const DEFAULT_SETTINGS: Settings = {
   rippleQuality: 'mid',
   progressMode: 'count-total',
   progressPercent: false,
+  lastPuzzlesCount: 10,
 }
 
 export type PieceStyle = 'standard' | 'artsy'
@@ -37,11 +38,16 @@ export interface Settings {
   rippleQuality: RippleQuality
   progressMode: ProgressMode
   progressPercent: boolean
+  lastPuzzlesCount: number
 }
 
 const SPACING_MIN = 0
 const SPACING_MAX = 32
 const SPACING_INC = 4
+
+const LAST_PUZZLES_MIN = 5
+const LAST_PUZZLES_MAX = 100
+const LAST_PUZZLES_INC = 5
 
 const ZOOM_MIN = 1.05
 const ZOOM_MAX = 2.0
@@ -104,7 +110,7 @@ const PROGRESS_MODES: { value: ProgressMode; label: string }[] = [
 ]
 
 export default function SettingsModal({ settings, onChange, onClose, puzzleHasProgress }: Props) {
-  const { zoomStep, resolution, panStep, theme, knobSize, pieceStyle, pieceSpacing, showBorder, rippleQuality, progressMode, progressPercent } = settings
+  const { zoomStep, resolution, panStep, theme, knobSize, pieceStyle, pieceSpacing, showBorder, rippleQuality, progressMode, progressPercent, lastPuzzlesCount } = settings
 
   const [knobInput, setKnobInput] = useState(String(knobSize))
   const [pendingSpacing, setPendingSpacing] = useState<number | null>(null)
@@ -299,6 +305,18 @@ export default function SettingsModal({ settings, onChange, onClose, puzzleHasPr
             </div>
           </div>
         )}
+
+        <div className="setting-divider" />
+
+        <Stepper
+          label="Last puzzles shown"
+          display={String(lastPuzzlesCount)}
+          onDecrement={() => onChange({ ...settings, lastPuzzlesCount: Math.max(LAST_PUZZLES_MIN, lastPuzzlesCount - LAST_PUZZLES_INC) })}
+          onIncrement={() => onChange({ ...settings, lastPuzzlesCount: Math.min(LAST_PUZZLES_MAX, lastPuzzlesCount + LAST_PUZZLES_INC) })}
+          decrementDisabled={lastPuzzlesCount <= LAST_PUZZLES_MIN}
+          incrementDisabled={lastPuzzlesCount >= LAST_PUZZLES_MAX}
+        />
+        <p className="setting-hint">How many recent completions the stats screen lists.</p>
 
         <div className="setting-divider" />
 

@@ -182,6 +182,16 @@ Open the app on another device on the same network, click **Join**, and type in 
 
 The server runs on port `8421` by default. If that port is already in use, pass a different one: `node server/index.js 9000`.
 
+## Stats
+
+Open the menu and choose **Stats** to see your puzzle history.
+
+- **Completed puzzles**: how many you've finished, total and average piece count, and average completion time, broken down across all of them and across the hardest 100, 50, 25, 10, and 5 you've completed, plus a list of your most recent completions (the number shown is a setting).
+- **All attempts**: totals across everything you've started, finished or not, including play sessions, total playtime, longest sitting, pieces placed, and pickups that were never placed.
+- **Records**: fastest completion, largest puzzle completed, largest single chain merge, fastest and largest multiplayer completion, and who you've played with most.
+
+Stats are tied to a name you type in rather than an account, and live only on this device. Since clearing your browser's data would erase them, use **Export stats** to save a JSON backup and **Import stats** to restore one.
+
 ## Tech stack
 
 - React + TypeScript + Vite

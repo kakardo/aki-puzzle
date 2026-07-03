@@ -1,0 +1,89 @@
+.stats-modal {
+  max-width: 480px;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.stats-name-input {
+  width: 12rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+.stats-section-title {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.stats-subsection-title {
+  margin: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--subtle);
+}
+
+.stats-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+
+.stats-table th,
+.stats-table td {
+  padding: 0.3rem 0.4rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.stats-table th:first-child,
+.stats-table td:first-child {
+  text-align: left;
+  color: var(--subtle);
+  font-variant-numeric: normal;
+}
+
+.stats-table thead tr {
+  border-bottom: 1px solid var(--border);
+}
+
+.stats-table th {
+  font-weight: 500;
+  color: var(--subtle);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.stats-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.stats-backup-row {
+  display: flex;
+  justify-content: center;
+  gap: 0.6rem;
+}
+
+.stats-import-label {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+}
+
+.stats-import-error {
+  color: #c0392b;
+}

@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import PuzzleBoard from './PuzzleBoard'
 import SettingsModal, { type Settings, type ProgressMode, type EdgeStyle, type RippleQuality, DEFAULT_SETTINGS } from './SettingsModal'
+import StatsScreen from './StatsScreen'
+import { useStats } from './stats/useStats'
 import { KNOB_DEFAULT } from './pieces'
 import DebugView from './debug/DebugView'
 import { useMultiplayer, type MultiplayerStatus, type MultiplayerMode } from './hooks/useMultiplayer'
@@ -40,6 +42,7 @@ function loadSettings(): Settings {
       delete parsed.showRipple
       if (!VALID_PROGRESS_MODES.includes(parsed.progressMode)) parsed.progressMode = 'count-total'
       if (typeof parsed.progressPercent !== 'boolean') parsed.progressPercent = false
+      if (typeof parsed.lastPuzzlesCount !== 'number' || !Number.isFinite(parsed.lastPuzzlesCount)) parsed.lastPuzzlesCount = DEFAULT_SETTINGS.lastPuzzlesCount
       return { ...DEFAULT_SETTINGS, ...parsed }
     }
   } catch {}
@@ -114,7 +117,9 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
   const [accentColor, setAccentColor] = useState(CUSTOM_DARK)
   const [settings, setSettings] = useState<Settings>(loadSettings)
   const [showSettings, setShowSettings] = useState(false)
+  const [showStats, setShowStats] = useState(false)
   const [puzzleHasProgress, setPuzzleHasProgress] = useState(false)
+  const stats = useStats()
 
   // Multiplayer
   const mp = useMultiplayer()
@@ -357,6 +362,7 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
     const boardEdgeStyle = (isGuestBoard ? session!.config.edgeStyle : settings.edgeStyle) as EdgeStyle
     const multiplayerProp: BoardMultiplayer | undefined =
       isHostBoard ? buildHostMultiplayer() : (isGuestBoard ? buildGuestMultiplayer(session!) : undefined)
+    const coPlayerNames = mp.mode !== 'solo' ? mp.players.filter(p => p.id !== mp.selfId).map(p => p.name) : []
 
     return (
       <>
@@ -380,9 +386,12 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
           accentColor={accentColor}
           onReset={handleLeaveBoard}
           onOpenSettings={() => setShowSettings(true)}
+          onOpenStats={() => setShowStats(true)}
           onToggleTheme={() => setSettings(s => ({ ...s, theme: s.theme === 'light' ? 'dark' : 'light' }))}
           onPieceMoved={() => setPuzzleHasProgress(true)}
           multiplayer={multiplayerProp}
+          statsHooks={stats}
+          coPlayerNames={coPlayerNames}
         />
         {mp.mode !== 'solo' && (
           <PlayerOverlay
@@ -404,6 +413,13 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
             }}
             onClose={() => setShowSettings(false)}
             puzzleHasProgress={puzzleHasProgress}
+          />
+        )}
+        {showStats && (
+          <StatsScreen
+            stats={stats}
+            lastPuzzlesCount={settings.lastPuzzlesCount}
+            onClose={() => setShowStats(false)}
           />
         )}
       </>
@@ -436,6 +452,10 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
           </svg>
           Settings
+        </button>
+
+        <button className="top-settings-btn" onClick={() => setShowStats(true)}>
+          Stats
         </button>
 
         <button className="top-settings-btn" onClick={onDebug}>
@@ -580,6 +600,14 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
           settings={settings}
           onChange={setSettings}
           onClose={() => setShowSettings(false)}
+        />
+      )}
+
+      {showStats && (
+        <StatsScreen
+          stats={stats}
+          lastPuzzlesCount={settings.lastPuzzlesCount}
+          onClose={() => setShowStats(false)}
         />
       )}
     </div>
