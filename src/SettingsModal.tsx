@@ -15,6 +15,8 @@ export const DEFAULT_SETTINGS: Settings = {
   rippleQuality: 'mid',
   progressMode: 'count-total',
   progressPercent: false,
+  pingNameOnRing: true,
+  pingNameOnArrow: false,
   lastPuzzlesCount: 10,
 }
 
@@ -38,6 +40,8 @@ export interface Settings {
   rippleQuality: RippleQuality
   progressMode: ProgressMode
   progressPercent: boolean
+  pingNameOnRing: boolean
+  pingNameOnArrow: boolean
   lastPuzzlesCount: number
 }
 
@@ -110,11 +114,12 @@ const PROGRESS_MODES: { value: ProgressMode; label: string }[] = [
 ]
 
 export default function SettingsModal({ settings, onChange, onClose, puzzleHasProgress }: Props) {
-  const { zoomStep, resolution, panStep, theme, knobSize, pieceStyle, pieceSpacing, showBorder, rippleQuality, progressMode, progressPercent, lastPuzzlesCount } = settings
+  const { zoomStep, resolution, panStep, theme, knobSize, pieceStyle, pieceSpacing, showBorder, rippleQuality, progressMode, progressPercent, pingNameOnRing, pingNameOnArrow, lastPuzzlesCount } = settings
 
   const [knobInput, setKnobInput] = useState(String(knobSize))
   const [pendingSpacing, setPendingSpacing] = useState<number | null>(null)
   const [pendingReset, setPendingReset] = useState(false)
+  const [activeTab, setActiveTab] = useState<'view' | 'pieces' | 'game'>('view')
 
   function requestReset() {
     if (puzzleHasProgress && settings.pieceSpacing !== DEFAULT_SETTINGS.pieceSpacing) {
@@ -155,184 +160,215 @@ export default function SettingsModal({ settings, onChange, onClose, puzzleHasPr
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
 
-        <div className="setting-row">
-          <span className="setting-label">Theme</span>
-          <div className="theme-toggle">
-            <button className={`theme-btn${theme === 'light' ? ' active' : ''}`} onClick={() => onChange({ ...settings, theme: 'light' })}>Light</button>
-            <button className={`theme-btn${theme === 'dark'  ? ' active' : ''}`} onClick={() => onChange({ ...settings, theme: 'dark'  })}>Dark</button>
-          </div>
+        <div className="settings-tabs">
+          <button className={`settings-tab${activeTab === 'view'   ? ' active' : ''}`} onClick={() => setActiveTab('view')}>View</button>
+          <button className={`settings-tab${activeTab === 'pieces' ? ' active' : ''}`} onClick={() => setActiveTab('pieces')}>Pieces</button>
+          <button className={`settings-tab${activeTab === 'game'   ? ' active' : ''}`} onClick={() => setActiveTab('game')}>Gameplay</button>
         </div>
 
-        <Stepper
-          label="Zoom step"
-          display={`${zoomStep.toFixed(2)}×`}
-          onDecrement={() => onChange({ ...settings, zoomStep: Math.max(ZOOM_MIN, parseFloat((zoomStep - ZOOM_INC).toFixed(2))) })}
-          onIncrement={() => onChange({ ...settings, zoomStep: Math.min(ZOOM_MAX, parseFloat((zoomStep + ZOOM_INC).toFixed(2))) })}
-          decrementDisabled={zoomStep <= ZOOM_MIN}
-          incrementDisabled={zoomStep >= ZOOM_MAX}
-        />
+        <div className="settings-body">
+          {activeTab === 'view' && (
+            <>
+              <div className="setting-row">
+                <span className="setting-label">Theme</span>
+                <div className="theme-toggle">
+                  <button className={`theme-btn${theme === 'light' ? ' active' : ''}`} onClick={() => onChange({ ...settings, theme: 'light' })}>Light</button>
+                  <button className={`theme-btn${theme === 'dark'  ? ' active' : ''}`} onClick={() => onChange({ ...settings, theme: 'dark'  })}>Dark</button>
+                </div>
+              </div>
 
-        {(() => {
-          const steps = [1, 2, 4, 99]
-          const labels: Record<number, string> = { 1: '1x', 2: '2x', 4: '4x', 99: 'Auto' }
-          const idx = steps.indexOf(resolution)
-          return (
-            <Stepper
-              label="Piece quality"
-              display={labels[resolution] ?? 'Auto'}
-              onDecrement={() => onChange({ ...settings, resolution: steps[idx - 1] })}
-              onIncrement={() => onChange({ ...settings, resolution: steps[idx + 1] })}
-              decrementDisabled={idx <= 0}
-              incrementDisabled={idx >= steps.length - 1}
-            />
-          )
-        })()}
-        <p className="setting-hint">Higher values stay crisp at greater zoom. Auto matches the image density. Applies on next puzzle.</p>
+              <Stepper
+                label="Zoom step"
+                display={`${zoomStep.toFixed(2)}×`}
+                onDecrement={() => onChange({ ...settings, zoomStep: Math.max(ZOOM_MIN, parseFloat((zoomStep - ZOOM_INC).toFixed(2))) })}
+                onIncrement={() => onChange({ ...settings, zoomStep: Math.min(ZOOM_MAX, parseFloat((zoomStep + ZOOM_INC).toFixed(2))) })}
+                decrementDisabled={zoomStep <= ZOOM_MIN}
+                incrementDisabled={zoomStep >= ZOOM_MAX}
+              />
 
-        <Stepper
-          label="WASD distance"
-          display={`${panStep}px`}
-          onDecrement={() => onChange({ ...settings, panStep: Math.max(PAN_MIN, panStep - PAN_INC) })}
-          onIncrement={() => onChange({ ...settings, panStep: Math.min(PAN_MAX, panStep + PAN_INC) })}
-          decrementDisabled={panStep <= PAN_MIN}
-          incrementDisabled={panStep >= PAN_MAX}
-        />
+              {(() => {
+                const steps = [1, 2, 4, 99]
+                const labels: Record<number, string> = { 1: '1x', 2: '2x', 4: '4x', 99: 'Auto' }
+                const idx = steps.indexOf(resolution)
+                return (
+                  <Stepper
+                    label="Piece quality"
+                    display={labels[resolution] ?? 'Auto'}
+                    onDecrement={() => onChange({ ...settings, resolution: steps[idx - 1] })}
+                    onIncrement={() => onChange({ ...settings, resolution: steps[idx + 1] })}
+                    decrementDisabled={idx <= 0}
+                    incrementDisabled={idx >= steps.length - 1}
+                  />
+                )
+              })()}
+              <p className="setting-hint">Higher values stay crisp at greater zoom. Auto matches the image density. Applies on next puzzle.</p>
 
-        <div className="setting-divider" />
+              <Stepper
+                label="WASD distance"
+                display={`${panStep}px`}
+                onDecrement={() => onChange({ ...settings, panStep: Math.max(PAN_MIN, panStep - PAN_INC) })}
+                onIncrement={() => onChange({ ...settings, panStep: Math.min(PAN_MAX, panStep + PAN_INC) })}
+                decrementDisabled={panStep <= PAN_MIN}
+                incrementDisabled={panStep >= PAN_MAX}
+              />
+            </>
+          )}
 
-        <div className="setting-row">
-          <span className="setting-label">Knob size</span>
-          <div className="knob-field">
-            <input
-              className="knob-input"
-              type="number"
-              inputMode="numeric"
-              min={KNOB_MIN}
-              max={KNOB_MAX}
-              placeholder={String(KNOB_DEFAULT)}
-              value={knobInput}
-              onChange={e => setKnobInput(e.target.value)}
-              onBlur={commitKnob}
-              onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-            />
-            <span className="knob-unit">%</span>
-          </div>
+          {activeTab === 'pieces' && (
+            <>
+              <div className="setting-row">
+                <span className="setting-label">Knob size</span>
+                <div className="knob-field">
+                  <input
+                    className="knob-input"
+                    type="number"
+                    inputMode="numeric"
+                    min={KNOB_MIN}
+                    max={KNOB_MAX}
+                    placeholder={String(KNOB_DEFAULT)}
+                    value={knobInput}
+                    onChange={e => setKnobInput(e.target.value)}
+                    onBlur={commitKnob}
+                    onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                  />
+                  <span className="knob-unit">%</span>
+                </div>
+              </div>
+              <p className="setting-hint">Default {DEFAULT_SETTINGS.knobSize}. Range {KNOB_MIN} to {KNOB_MAX}, where knobs reach the piece edge.</p>
+
+              <div className="setting-row">
+                <span className="setting-label">Piece style</span>
+                <div className="theme-toggle">
+                  {PIECE_STYLES.map(s => (
+                    <button
+                      key={s.value}
+                      className={`theme-btn${pieceStyle === s.value ? ' active' : ''}`}
+                      onClick={() => onChange({ ...settings, pieceStyle: s.value })}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="setting-row">
+                <span className="setting-label">Piece border</span>
+                <div className="theme-toggle">
+                  <button className={`theme-btn${showBorder  ? ' active' : ''}`} onClick={() => onChange({ ...settings, showBorder: true  })}>On</button>
+                  <button className={`theme-btn${!showBorder ? ' active' : ''}`} onClick={() => onChange({ ...settings, showBorder: false })}>Off</button>
+                </div>
+              </div>
+
+              <div className="setting-row">
+                <span className="setting-label">Ripple effect</span>
+                <div className="theme-toggle">
+                  {RIPPLE_QUALITIES.map(q => (
+                    <button
+                      key={q.value}
+                      className={`theme-btn${rippleQuality === q.value ? ' active' : ''}`}
+                      onClick={() => onChange({ ...settings, rippleQuality: q.value })}
+                    >
+                      {q.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <p className="setting-hint">Wave across the picture when the final piece is placed. Lower quality runs smoother on weaker machines.</p>
+
+              <Stepper
+                label="Piece spacing"
+                display={`${pendingSpacing ?? pieceSpacing}px`}
+                onDecrement={() => requestSpacingChange(Math.max(SPACING_MIN, (pendingSpacing ?? pieceSpacing) - SPACING_INC))}
+                onIncrement={() => requestSpacingChange(Math.min(SPACING_MAX, (pendingSpacing ?? pieceSpacing) + SPACING_INC))}
+                decrementDisabled={(pendingSpacing ?? pieceSpacing) <= SPACING_MIN}
+                incrementDisabled={(pendingSpacing ?? pieceSpacing) >= SPACING_MAX}
+              />
+              {pendingSpacing !== null ? (
+                <div className="spacing-warning">
+                  <span className="spacing-warning-text">Scattered pieces will be reshuffled.</span>
+                  <div className="spacing-warning-actions">
+                    <button className="spacing-btn spacing-btn--cancel" onClick={() => setPendingSpacing(null)}>Cancel</button>
+                    <button className="spacing-btn spacing-btn--apply" onClick={() => { onChange({ ...settings, pieceSpacing: pendingSpacing }); setPendingSpacing(null) }}>Apply</button>
+                  </div>
+                </div>
+              ) : (
+                <p className="setting-hint">Gap between scattered pieces.</p>
+              )}
+            </>
+          )}
+
+          {activeTab === 'game' && (
+            <>
+              <div className="setting-row">
+                <span className="setting-label">Progress</span>
+                <div className="theme-toggle">
+                  {PROGRESS_MODES.map(m => (
+                    <button
+                      key={m.value}
+                      className={`theme-btn${progressMode === m.value ? ' active' : ''}`}
+                      onClick={() => onChange({ ...settings, progressMode: m.value })}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {(progressMode === 'count' || progressMode === 'count-total') && (
+                <div className="setting-row">
+                  <span className="setting-label">Show %</span>
+                  <div className="theme-toggle">
+                    <button className={`theme-btn${progressPercent ? ' active' : ''}`} onClick={() => onChange({ ...settings, progressPercent: true })}>On</button>
+                    <button className={`theme-btn${!progressPercent ? ' active' : ''}`} onClick={() => onChange({ ...settings, progressPercent: false })}>Off</button>
+                  </div>
+                </div>
+              )}
+
+              <div className="setting-row">
+                <span className="setting-label">Ping name on marker</span>
+                <div className="theme-toggle">
+                  <button className={`theme-btn${pingNameOnRing  ? ' active' : ''}`} onClick={() => onChange({ ...settings, pingNameOnRing: true  })}>On</button>
+                  <button className={`theme-btn${!pingNameOnRing ? ' active' : ''}`} onClick={() => onChange({ ...settings, pingNameOnRing: false })}>Off</button>
+                </div>
+              </div>
+
+              <div className="setting-row">
+                <span className="setting-label">Ping name on arrow</span>
+                <div className="theme-toggle">
+                  <button className={`theme-btn${pingNameOnArrow  ? ' active' : ''}`} onClick={() => onChange({ ...settings, pingNameOnArrow: true  })}>On</button>
+                  <button className={`theme-btn${!pingNameOnArrow ? ' active' : ''}`} onClick={() => onChange({ ...settings, pingNameOnArrow: false })}>Off</button>
+                </div>
+              </div>
+              <p className="setting-hint">Whether a player's name shows next to their ping. Applies in multiplayer.</p>
+
+              <Stepper
+                label="Last puzzles shown"
+                display={String(lastPuzzlesCount)}
+                onDecrement={() => onChange({ ...settings, lastPuzzlesCount: Math.max(LAST_PUZZLES_MIN, lastPuzzlesCount - LAST_PUZZLES_INC) })}
+                onIncrement={() => onChange({ ...settings, lastPuzzlesCount: Math.min(LAST_PUZZLES_MAX, lastPuzzlesCount + LAST_PUZZLES_INC) })}
+                decrementDisabled={lastPuzzlesCount <= LAST_PUZZLES_MIN}
+                incrementDisabled={lastPuzzlesCount >= LAST_PUZZLES_MAX}
+              />
+              <p className="setting-hint">How many recent completions the stats screen lists.</p>
+            </>
+          )}
         </div>
-        <p className="setting-hint">Default {DEFAULT_SETTINGS.knobSize}. Range {KNOB_MIN} to {KNOB_MAX}, where knobs reach the piece edge.</p>
 
-        <div className="setting-row">
-          <span className="setting-label">Piece style</span>
-          <div className="theme-toggle">
-            {PIECE_STYLES.map(s => (
-              <button
-                key={s.value}
-                className={`theme-btn${pieceStyle === s.value ? ' active' : ''}`}
-                onClick={() => onChange({ ...settings, pieceStyle: s.value })}
-              >
-                {s.label}
-              </button>
-            ))}
+        <div className="settings-footer">
+          <div className="reset-row">
+            <button className="reset-btn" onClick={requestReset}>Reset to defaults</button>
           </div>
-        </div>
 
-        <div className="setting-row">
-          <span className="setting-label">Piece border</span>
-          <div className="theme-toggle">
-            <button className={`theme-btn${showBorder  ? ' active' : ''}`} onClick={() => onChange({ ...settings, showBorder: true  })}>On</button>
-            <button className={`theme-btn${!showBorder ? ' active' : ''}`} onClick={() => onChange({ ...settings, showBorder: false })}>Off</button>
-          </div>
-        </div>
-
-        <div className="setting-row">
-          <span className="setting-label">Ripple effect</span>
-          <div className="theme-toggle">
-            {RIPPLE_QUALITIES.map(q => (
-              <button
-                key={q.value}
-                className={`theme-btn${rippleQuality === q.value ? ' active' : ''}`}
-                onClick={() => onChange({ ...settings, rippleQuality: q.value })}
-              >
-                {q.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <p className="setting-hint">Wave across the picture when the final piece is placed. Lower quality runs smoother on weaker machines.</p>
-
-        <Stepper
-          label="Piece spacing"
-          display={`${pendingSpacing ?? pieceSpacing}px`}
-          onDecrement={() => requestSpacingChange(Math.max(SPACING_MIN, (pendingSpacing ?? pieceSpacing) - SPACING_INC))}
-          onIncrement={() => requestSpacingChange(Math.min(SPACING_MAX, (pendingSpacing ?? pieceSpacing) + SPACING_INC))}
-          decrementDisabled={(pendingSpacing ?? pieceSpacing) <= SPACING_MIN}
-          incrementDisabled={(pendingSpacing ?? pieceSpacing) >= SPACING_MAX}
-        />
-        {pendingSpacing !== null ? (
-          <div className="spacing-warning">
-            <span className="spacing-warning-text">Scattered pieces will be reshuffled.</span>
-            <div className="spacing-warning-actions">
-              <button className="spacing-btn spacing-btn--cancel" onClick={() => setPendingSpacing(null)}>Cancel</button>
-              <button className="spacing-btn spacing-btn--apply" onClick={() => { onChange({ ...settings, pieceSpacing: pendingSpacing }); setPendingSpacing(null) }}>Apply</button>
+          {pendingReset && (
+            <div className="spacing-warning">
+              <span className="spacing-warning-text">Scattered pieces will be reshuffled.</span>
+              <div className="spacing-warning-actions">
+                <button className="spacing-btn spacing-btn--cancel" onClick={() => setPendingReset(false)}>Cancel</button>
+                <button className="spacing-btn spacing-btn--apply" onClick={applyReset}>Apply</button>
+              </div>
             </div>
-          </div>
-        ) : (
-          <p className="setting-hint">Gap between scattered pieces.</p>
-        )}
-
-        <div className="setting-divider" />
-
-        <div className="setting-row">
-          <span className="setting-label">Progress</span>
-          <div className="theme-toggle">
-            {PROGRESS_MODES.map(m => (
-              <button
-                key={m.value}
-                className={`theme-btn${progressMode === m.value ? ' active' : ''}`}
-                onClick={() => onChange({ ...settings, progressMode: m.value })}
-              >
-                {m.label}
-              </button>
-            ))}
-          </div>
+          )}
         </div>
-
-        {(progressMode === 'count' || progressMode === 'count-total') && (
-          <div className="setting-row">
-            <span className="setting-label">Show %</span>
-            <div className="theme-toggle">
-              <button className={`theme-btn${progressPercent ? ' active' : ''}`} onClick={() => onChange({ ...settings, progressPercent: true })}>On</button>
-              <button className={`theme-btn${!progressPercent ? ' active' : ''}`} onClick={() => onChange({ ...settings, progressPercent: false })}>Off</button>
-            </div>
-          </div>
-        )}
-
-        <div className="setting-divider" />
-
-        <Stepper
-          label="Last puzzles shown"
-          display={String(lastPuzzlesCount)}
-          onDecrement={() => onChange({ ...settings, lastPuzzlesCount: Math.max(LAST_PUZZLES_MIN, lastPuzzlesCount - LAST_PUZZLES_INC) })}
-          onIncrement={() => onChange({ ...settings, lastPuzzlesCount: Math.min(LAST_PUZZLES_MAX, lastPuzzlesCount + LAST_PUZZLES_INC) })}
-          decrementDisabled={lastPuzzlesCount <= LAST_PUZZLES_MIN}
-          incrementDisabled={lastPuzzlesCount >= LAST_PUZZLES_MAX}
-        />
-        <p className="setting-hint">How many recent completions the stats screen lists.</p>
-
-        <div className="setting-divider" />
-
-        <div className="reset-row">
-          <button className="reset-btn" onClick={requestReset}>Reset to defaults</button>
-        </div>
-
-        {pendingReset && (
-          <div className="spacing-warning">
-            <span className="spacing-warning-text">Scattered pieces will be reshuffled.</span>
-            <div className="spacing-warning-actions">
-              <button className="spacing-btn spacing-btn--cancel" onClick={() => setPendingReset(false)}>Cancel</button>
-              <button className="spacing-btn spacing-btn--apply" onClick={applyReset}>Apply</button>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   )

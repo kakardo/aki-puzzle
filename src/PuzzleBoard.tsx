@@ -30,6 +30,8 @@ interface Props {
   progressPercent: boolean
   theme: 'light' | 'dark'
   accentColor: string
+  pingNameOnRing?: boolean
+  pingNameOnArrow?: boolean
   onReset: () => void
   onOpenSettings: () => void
   onOpenStats?: () => void
@@ -63,7 +65,7 @@ function formatProgress(locked: number, total: number, mode: ProgressMode, showP
   return `${locked}/${total}${pctStr}`
 }
 
-export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep, resolution, panStep, knobSize, pieceStyle, pieceSpacing, edgeStyle, showBorder, rippleQuality, progressMode, progressPercent, theme, accentColor, onReset, onOpenSettings, onOpenStats, onToggleTheme, onPieceMoved, debugActionsRef, multiplayer, statsHooks, coPlayerNames }: Props) {
+export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep, resolution, panStep, knobSize, pieceStyle, pieceSpacing, edgeStyle, showBorder, rippleQuality, progressMode, progressPercent, theme, accentColor, pingNameOnRing = true, pingNameOnArrow = false, onReset, onOpenSettings, onOpenStats, onToggleTheme, onPieceMoved, debugActionsRef, multiplayer, statsHooks, coPlayerNames }: Props) {
   const [pieces, setPieces] = useState<PieceData[]>([])
   const [groups, setGroups] = useState<Record<string, string>>({})
   const [solved, setSolved] = useState(false)
@@ -1247,7 +1249,7 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
             return (
               <div key={ping.id} className="ping" style={{ left: sx, top: sy }}>
                 <span className="ping-ring" style={{ borderColor: ping.color, boxShadow: `0 0 12px ${ping.color}` }} />
-                {ping.name && <span className="ping-name" style={{ background: ping.color }}>{ping.name}</span>}
+                {ping.name && pingNameOnRing && <span className="ping-name" style={{ background: ping.color }}>{ping.name}</span>}
               </div>
             )
           }
@@ -1266,11 +1268,17 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
           const angle = (Math.atan2(dy, dx) * 180) / Math.PI
           return (
             <div key={ping.id} className="ping" style={{ left: ex, top: ey }}>
-              <span
+              <svg
                 className="ping-arrow"
-                style={{ transform: `rotate(${angle}deg)`, borderLeftColor: ping.color, filter: `drop-shadow(0 0 6px ${ping.color})` }}
-              />
-              {ping.name && <span className="ping-name" style={{ background: ping.color }}>{ping.name}</span>}
+                width="48"
+                height="20"
+                viewBox="0 0 48 20"
+                style={{ transform: `rotate(${angle}deg)`, filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.45))' }}
+              >
+                <line x1="3" y1="10" x2="30" y2="10" stroke={ping.color} strokeWidth="9" strokeLinecap="round" />
+                <polygon points="27,0 27,20 47,10" fill={ping.color} />
+              </svg>
+              {ping.name && pingNameOnArrow && <span className="ping-name" style={{ background: ping.color }}>{ping.name}</span>}
             </div>
           )
         })}

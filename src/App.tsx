@@ -42,6 +42,8 @@ function loadSettings(): Settings {
       delete parsed.showRipple
       if (!VALID_PROGRESS_MODES.includes(parsed.progressMode)) parsed.progressMode = 'count-total'
       if (typeof parsed.progressPercent !== 'boolean') parsed.progressPercent = false
+      if (typeof parsed.pingNameOnRing !== 'boolean') parsed.pingNameOnRing = DEFAULT_SETTINGS.pingNameOnRing
+      if (typeof parsed.pingNameOnArrow !== 'boolean') parsed.pingNameOnArrow = DEFAULT_SETTINGS.pingNameOnArrow
       if (typeof parsed.lastPuzzlesCount !== 'number' || !Number.isFinite(parsed.lastPuzzlesCount)) parsed.lastPuzzlesCount = DEFAULT_SETTINGS.lastPuzzlesCount
       return { ...DEFAULT_SETTINGS, ...parsed }
     }
@@ -388,6 +390,8 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
           progressPercent={settings.progressPercent}
           theme={settings.theme}
           accentColor={accentColor}
+          pingNameOnRing={settings.pingNameOnRing}
+          pingNameOnArrow={settings.pingNameOnArrow}
           onReset={handleLeaveBoard}
           onOpenSettings={() => setShowSettings(true)}
           onOpenStats={() => setShowStats(true)}

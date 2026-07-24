@@ -13,11 +13,58 @@
   color: var(--text);
   border-radius: 10px;
   padding: 1.5rem 2rem;
-  min-width: 300px;
+  width: 27rem;
+  max-width: 92vw;
+  max-height: 85vh;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
   display: flex;
   flex-direction: column;
   gap: 1.1rem;
+}
+
+.settings-tabs {
+  display: flex;
+  gap: 0.25rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.settings-tab {
+  flex: 1;
+  padding: 0.5rem 0.5rem;
+  border: none;
+  background: none;
+  color: var(--subtle);
+  font-size: 0.88rem;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.1s, border-color 0.1s;
+}
+
+.settings-tab:hover {
+  color: var(--text);
+}
+
+.settings-tab.active {
+  color: var(--text);
+  border-bottom-color: var(--text);
+  font-weight: 600;
+}
+
+.settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-right: 0.35rem;
+}
+
+.settings-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
 }
 
 .modal-header {

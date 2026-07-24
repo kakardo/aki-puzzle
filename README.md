@@ -37,18 +37,20 @@ Your image, piece count, and settings are saved between sessions. If no piece co
 
 ## Settings
 
-Open the menu (top left) and choose **Settings**.
+Open the menu (top left) and choose **Settings**. Settings are grouped into three tabs: View, Pieces, and Gameplay.
 
-| Setting | Options | Default |
-|---|---|---|
-| Zoom step | 1.05x to 2.00x | 1.25x |
-| Piece quality | 1x, 2x, 4x, Auto | Auto |
-| WASD distance | 20 px to 300 px | 80 px |
-| Knob size | 40 to 128 | 120 |
-| Piece style | Standard, Artsy | Standard |
-| Piece spacing | 0 px to 32 px | 4 px |
-| Progress | Off, %, Count, Count+Total | Count+Total |
-| Show % | On, Off | Off |
+| Setting | Tab | Options | Default |
+|---|---|---|---|
+| Zoom step | View | 1.05x to 2.00x | 1.25x |
+| Piece quality | View | 1x, 2x, 4x, Auto | Auto |
+| WASD distance | View | 20 px to 300 px | 80 px |
+| Knob size | Pieces | 40 to 128 | 120 |
+| Piece style | Pieces | Standard, Artsy | Standard |
+| Piece spacing | Pieces | 0 px to 32 px | 4 px |
+| Progress | Gameplay | Off, %, Count, Count+Total | Count+Total |
+| Show % | Gameplay | On, Off | Off |
+| Ping name on marker | Gameplay | On, Off | On |
+| Ping name on arrow | Gameplay | On, Off | Off |
 
 Auto quality matches the image's native pixel density and is the right choice for most images. Lower settings speed up generation for very high piece counts.
 
@@ -59,6 +61,8 @@ Piece spacing controls the gap between scattered pieces at the start of a puzzle
 **Reset to defaults** restores all settings to their original values. If any piece has been moved and the reset would change the piece spacing, a confirmation appears before applying, since that will reshuffle the board.
 
 The progress counter is shown below the menu button and in the open menu. Count+Total displays the number of locked pieces and the total, e.g. `85/500`. Show % adds the percentage in parentheses, e.g. `85/500 (17%)`.
+
+The two ping name settings control whether a player's name is shown next to their ping in multiplayer: one for pings on screen (the ring) and one for pings off screen (the edge arrow). They have no effect in single player, where pings never carry a name.
 
 ## Piece counts
 
