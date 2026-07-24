@@ -116,15 +116,16 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
   // Pings: transient "look here" markers keyed to a world coordinate, so every
   // viewer renders them through their own pan and zoom. Low frequency, so
   // plain state is fine. Each one clears itself after PING_LIFETIME_MS.
-  const [pings, setPings] = useState<{ id: number; x: number; y: number; color: string; name: string; solo: boolean }[]>([])
+  const [pings, setPings] = useState<{ id: number; x: number; y: number; color: string; name: string; own: boolean }[]>([])
   const pingIdRef = useRef(0)
   const cursorRef = useRef<{ x: number; y: number } | null>(null)
   const pingLayerRef = useRef<HTMLDivElement>(null)
-  // solo pings are always at the player's own cursor, so they only ever draw
-  // the ring: no name, and no off screen edge arrow.
-  const addPing = useCallback((color: string, name: string, x: number, y: number, solo = false) => {
+  // Your own ping is always at your own cursor, so it only ever draws the ring,
+  // never an edge arrow. Arrows are only for other players whose view does not
+  // include the pinged spot.
+  const addPing = useCallback((color: string, name: string, x: number, y: number, own = false) => {
     const id = ++pingIdRef.current
-    setPings(prev => [...prev, { id, x, y, color, name, solo }])
+    setPings(prev => [...prev, { id, x, y, color, name, own }])
     setTimeout(() => setPings(prev => prev.filter(p => p.id !== id)), PING_LIFETIME_MS)
   }, [])
 
@@ -306,8 +307,9 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
         const wy = (cur.y - panRef.current.y) / zoomRef.current
         const mp = mpRef.current
         if (mp) {
-          // Multiplayer: ping in your colour with your name, and tell the others.
-          addPing(mp.selfColor, mp.selfName, wx, wy)
+          // Multiplayer: your own ping shows as a ring (own = true), and the
+          // others are told so it can point them to the spot.
+          addPing(mp.selfColor, mp.selfName, wx, wy, true)
           mp.api.sendPing(wx, wy)
         } else {
           // Solo: a quick marker for yourself, no name, ring only.
@@ -1233,13 +1235,14 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
           const sy = ping.y * zoom + pan.y
           const W = size.width
           const H = size.height
-          // Solo pings sit at your own cursor: just draw the ring where it is,
-          // as long as it is anywhere in the viewport. No name, no edge arrow.
-          if (ping.solo) {
+          // Your own ping sits at your own cursor: always a ring, drawn wherever
+          // it is in the viewport, never an edge arrow.
+          if (ping.own) {
             if (sx < 0 || sx > W || sy < 0 || sy > H) return null
             return (
               <div key={ping.id} className="ping" style={{ left: sx, top: sy }}>
                 <span className="ping-ring" style={{ borderColor: ping.color, boxShadow: `0 0 12px ${ping.color}` }} />
+                {ping.name && pingNameOnRing && <span className="ping-name" style={{ background: ping.color }}>{ping.name}</span>}
               </div>
             )
           }
