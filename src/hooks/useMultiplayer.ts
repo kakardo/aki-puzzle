@@ -136,6 +136,12 @@ export function useMultiplayer(): Multiplayer {
         if (msg.playerId === selfIdRef.current) return
         h?.onRemoteRelease(msg.pieceId)
         return
+      case 'player_pinged': {
+        if (msg.playerId === selfIdRef.current) return
+        const player = playersRef.current.find(p => p.id === msg.playerId)
+        h?.onRemotePing(player?.color ?? '#888', player?.name ?? '', msg.x, msg.y)
+        return
+      }
       case 'error':
         if (msg.code === 'version_mismatch' || msg.code === 'session_full') {
           setErrorMessage(msg.message)
@@ -285,6 +291,9 @@ export function useMultiplayer(): Multiplayer {
       sendRelease(pieceId) {
         flushPendingDrag()
         transportRef.current?.send({ type: 'release', pieceId })
+      },
+      sendPing(x, y) {
+        transportRef.current?.send({ type: 'ping', x, y })
       },
     }
   }

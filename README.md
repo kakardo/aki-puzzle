@@ -33,6 +33,7 @@ Your image, piece count, and settings are saved between sessions. If no piece co
 | `R` | Reset zoom |
 | `W` `A` `S` `D` | Pan |
 | `Tab` | Toggle image preview |
+| `Shift` | Ping the spot under the cursor |
 
 ## Settings
 
@@ -179,6 +180,7 @@ Open the app on another device on the same network, click **Join**, and type in 
 - A piece being dragged by another player glows in that player's colour so you know to leave it alone.
 - When a new player joins, the current board state is sent to them automatically so they start in sync.
 - When a player disconnects, their highlights clear and the session continues for everyone else.
+- Tap `Shift` to ping the spot under your cursor. The other players see a marker in your colour with your name, and if the spot is off their screen an arrow at the edge points toward it. Pinging also works in single player, where it is just a quick marker with no name.
 
 The server runs on port `8421` by default. If that port is already in use, pass a different one: `node server/index.js 9000`.
 

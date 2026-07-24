@@ -920,3 +920,63 @@ kbd {
   box-shadow: 0 4px 16px rgba(0,0,0,0.15);
 }
 
+/* Multiplayer pings: a coloured marker at a spot on the board, or an arrow at
+   the edge when that spot is off screen for this player. */
+.ping-layer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+  z-index: 6;
+}
+
+.ping {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  animation: ping-fade 2.5s forwards;
+}
+
+@keyframes ping-fade {
+  0%, 82% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.ping-ring {
+  display: block;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 3px solid transparent;
+  animation: ping-pulse 1.1s ease-out infinite;
+}
+
+@keyframes ping-pulse {
+  0% { transform: scale(0.45); opacity: 0.95; }
+  70% { transform: scale(1.7); opacity: 0.2; }
+  100% { transform: scale(0.45); opacity: 0.95; }
+}
+
+.ping-arrow {
+  display: block;
+  width: 0;
+  height: 0;
+  border-top: 10px solid transparent;
+  border-bottom: 10px solid transparent;
+  border-left: 18px solid transparent;
+}
+
+.ping-name {
+  position: absolute;
+  left: 50%;
+  top: 100%;
+  transform: translate(-50%, 6px);
+  white-space: nowrap;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  color: #fff;
+  padding: 3px 8px;
+  border-radius: 8px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.35);
+}
+

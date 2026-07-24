@@ -133,6 +133,13 @@ function handleMessage(ws, msg) {
       }
       return
     }
+    case 'ping': {
+      // Transient: relayed to everyone else and never stored, so a late
+      // joiner never inherits a stale ping.
+      if (typeof msg.x !== 'number' || typeof msg.y !== 'number') return
+      broadcast({ type: 'player_pinged', playerId, x: msg.x, y: msg.y }, playerId)
+      return
+    }
     case 'request_sync': {
       const snap = snapshot(store)
       if (snap) send(ws, { type: 'session_created', session: snap })

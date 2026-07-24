@@ -1,7 +1,7 @@
 // Plain JS mirror of src/multiplayer/protocol.ts. Keep the two in sync by
 // hand when the protocol changes.
 
-export const PROTOCOL_VERSION = 1
+export const PROTOCOL_VERSION = 2
 export const DEFAULT_PORT = 8421
 
 export const PLAYER_COLORS = [

@@ -264,6 +264,8 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
   function buildHostMultiplayer(): BoardMultiplayer {
     return {
       role: 'host',
+      selfColor: mp.selfColor ?? '#888',
+      selfName: mp.players.find(p => p.id === mp.selfId)?.name ?? '',
       seed: hostSeedRef.current,
       genWidth: null,
       genHeight: null,
@@ -308,6 +310,8 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
     }
     return {
       role: 'guest',
+      selfColor: mp.selfColor ?? '#888',
+      selfName: mp.players.find(p => p.id === mp.selfId)?.name ?? '',
       seed: session.config.seed,
       genWidth: session.config.genWidth,
       genHeight: session.config.genHeight,

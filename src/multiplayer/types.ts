@@ -10,6 +10,9 @@ export type RemoteHandlers = {
   onRemoteRelease(pieceId: string): void
   onPlayerLeft(playerId: string): void
   onGrabDenied(pieceId: string): void
+  // A ping from another player, at a world coordinate. Colour and name are
+  // resolved by the hook from the players list before this fires.
+  onRemotePing(color: string, name: string, x: number, y: number): void
 }
 
 // Outgoing calls the board makes during the drag lifecycle. All of them are
@@ -19,12 +22,17 @@ export type MultiplayerSendApi = {
   sendDrag(pieceId: string, x: number, y: number): void
   sendDrop(pieceId: string, pieces: NetPiece[], groups: Groups): void
   sendRelease(pieceId: string): void
+  sendPing(x: number, y: number): void
 }
 
 // Everything PuzzleBoard needs for a multiplayer session, bundled into one
 // optional prop so solo play passes nothing at all.
 export type BoardMultiplayer = {
   role: 'host' | 'guest'
+  // This player's own colour and name, used to draw their own ping locally
+  // without waiting for the server to echo it back.
+  selfColor: string
+  selfName: string
   seed: number
   // Generation viewport. Guests must lay out with the host's dimensions so
   // world coordinates match; the host passes null and reports its own size

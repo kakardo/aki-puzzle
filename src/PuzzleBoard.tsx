@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { Stage, Layer, Image as KonvaImage, Rect } from 'react-konva'
 import type KonvaType from 'konva'
 import type { KonvaEventObject } from 'konva/lib/Node'
@@ -50,6 +50,9 @@ const SNAP_MIN_SCREEN_PX = 12
 const SNAP_MAX_KNOB_FRAC = 0.5
 const SNAP_MAX_KNOB_FRAC_MAX_ZOOM = 0.25
 const SNAP_ALIGN_EPSILON = 2
+
+// How long a ping stays on screen before it clears itself.
+const PING_LIFETIME_MS = 2500
 
 function formatProgress(locked: number, total: number, mode: ProgressMode, showPct: boolean): string {
   if (mode === 'off' || total === 0) return ''
@@ -108,6 +111,21 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
   // local drags whose grab the server denied; their dragend commits nothing
   const deniedDrags = useRef<Set<string>>(new Set())
 
+  // Pings: transient "look here" markers keyed to a world coordinate, so every
+  // viewer renders them through their own pan and zoom. Low frequency, so
+  // plain state is fine. Each one clears itself after PING_LIFETIME_MS.
+  const [pings, setPings] = useState<{ id: number; x: number; y: number; color: string; name: string; solo: boolean }[]>([])
+  const pingIdRef = useRef(0)
+  const cursorRef = useRef<{ x: number; y: number } | null>(null)
+  const pingLayerRef = useRef<HTMLDivElement>(null)
+  // solo pings are always at the player's own cursor, so they only ever draw
+  // the ring: no name, and no off screen edge arrow.
+  const addPing = useCallback((color: string, name: string, x: number, y: number, solo = false) => {
+    const id = ++pingIdRef.current
+    setPings(prev => [...prev, { id, x, y, color, name, solo }])
+    setTimeout(() => setPings(prev => prev.filter(p => p.id !== id)), PING_LIFETIME_MS)
+  }, [])
+
   // Stats bookkeeping for the puzzle attempt currently on screen. Reset
   // whenever a fresh puzzle is generated (see the [imageSrc] effect below).
   const statsSessionIdRef = useRef<string | null>(null)
@@ -118,6 +136,9 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
   const panRef = useRef(pan)
   useEffect(() => { zoomRef.current = zoom }, [zoom])
   useEffect(() => { panRef.current = pan }, [pan])
+  // Latest accent colour for the solo ping, read from the once bound key handler
+  const accentColorRef = useRef(accentColor)
+  useEffect(() => { accentColorRef.current = accentColor })
 
   useEffect(() => { groupsRef.current = groups }, [groups])
   useEffect(() => { piecesRef.current = pieces }, [pieces])
@@ -263,10 +284,35 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
     return () => window.removeEventListener('resize', handleResize)
   }, [])
 
+  // Keep the latest cursor position so a Shift ping lands where the pointer is.
+  useEffect(() => {
+    function track(e: MouseEvent) { cursorRef.current = { x: e.clientX, y: e.clientY } }
+    window.addEventListener('mousemove', track)
+    return () => window.removeEventListener('mousemove', track)
+  }, [])
+
   useEffect(() => {
     function handleKey(e: KeyboardEvent) {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
       if (e.key === 'Tab') { e.preventDefault(); if (!e.repeat) setShowPreview(v => !v); return }
+      if (e.key === 'Shift') {
+        // Ping the spot under the cursor, one per tap. Fall back to the screen
+        // centre if the pointer has not moved yet this session.
+        if (e.repeat) return
+        const cur = cursorRef.current ?? { x: window.innerWidth / 2, y: window.innerHeight / 2 }
+        const wx = (cur.x - panRef.current.x) / zoomRef.current
+        const wy = (cur.y - panRef.current.y) / zoomRef.current
+        const mp = mpRef.current
+        if (mp) {
+          // Multiplayer: ping in your colour with your name, and tell the others.
+          addPing(mp.selfColor, mp.selfName, wx, wy)
+          mp.api.sendPing(wx, wy)
+        } else {
+          // Solo: a quick marker for yourself, no name, ring only.
+          addPing(accentColorRef.current, '', wx, wy, true)
+        }
+        return
+      }
       const key = e.key.toLowerCase()
       if (key === 'e') {
         const newZoom = Math.min(zoomRef.current * zoomStep, 16)
@@ -444,6 +490,9 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
         deniedDrags.current.add(pieceId)
         node.stopDrag()
       }
+    },
+    onRemotePing(color, name, x, y) {
+      addPing(color, name, x, y)
     },
   })
 
@@ -922,6 +971,11 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
       stage.batchDraw()
     }
     redrawBordersRef.current()
+    // Pan commits to state only on mouseup, so shift the ping overlay along
+    // imperatively until then, matching the stage.
+    if (pingLayerRef.current) {
+      pingLayerRef.current.style.transform = `translate(${newPan.x - pan.x}px, ${newPan.y - pan.y}px)`
+    }
   }
 
   function handleLeave() {
@@ -935,6 +989,9 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
     if (isPanning.current) {
       // Commit the final pan to state once, so React and the refs agree.
       setPan(panRef.current)
+      // The committed pan re-renders the overlay at the right spot, so drop
+      // the temporary imperative shift.
+      if (pingLayerRef.current) pingLayerRef.current.style.transform = ''
     }
     isPanning.current = false
   }
@@ -1007,6 +1064,7 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
                 <span><kbd>WASD</kbd> Pan</span>
                 <span><kbd>Drag</kbd> Pan</span>
                 <span><kbd>Tab</kbd> Preview image</span>
+                <span><kbd>Shift</kbd> Ping a spot</span>
               </div>
             </div>
           </>
@@ -1166,6 +1224,57 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
         height={size.height * (window.devicePixelRatio || 1)}
         style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none' }}
       />
+
+      <div className="ping-layer" ref={pingLayerRef}>
+        {pings.map(ping => {
+          const sx = ping.x * zoom + pan.x
+          const sy = ping.y * zoom + pan.y
+          const W = size.width
+          const H = size.height
+          // Solo pings sit at your own cursor: just draw the ring where it is,
+          // as long as it is anywhere in the viewport. No name, no edge arrow.
+          if (ping.solo) {
+            if (sx < 0 || sx > W || sy < 0 || sy > H) return null
+            return (
+              <div key={ping.id} className="ping" style={{ left: sx, top: sy }}>
+                <span className="ping-ring" style={{ borderColor: ping.color, boxShadow: `0 0 12px ${ping.color}` }} />
+              </div>
+            )
+          }
+          const margin = 56
+          const onScreen = sx >= margin && sx <= W - margin && sy >= margin && sy <= H - margin
+          if (onScreen) {
+            return (
+              <div key={ping.id} className="ping" style={{ left: sx, top: sy }}>
+                <span className="ping-ring" style={{ borderColor: ping.color, boxShadow: `0 0 12px ${ping.color}` }} />
+                {ping.name && <span className="ping-name" style={{ background: ping.color }}>{ping.name}</span>}
+              </div>
+            )
+          }
+          // Off screen for this viewer: pin an arrow to the viewport edge and
+          // point it from screen centre toward the world spot.
+          const cx = W / 2
+          const cy = H / 2
+          const dx = sx - cx
+          const dy = sy - cy
+          const scale = Math.min(
+            Math.max(W / 2 - margin, 1) / Math.max(Math.abs(dx), 1e-6),
+            Math.max(H / 2 - margin, 1) / Math.max(Math.abs(dy), 1e-6),
+          )
+          const ex = cx + dx * scale
+          const ey = cy + dy * scale
+          const angle = (Math.atan2(dy, dx) * 180) / Math.PI
+          return (
+            <div key={ping.id} className="ping" style={{ left: ex, top: ey }}>
+              <span
+                className="ping-arrow"
+                style={{ transform: `rotate(${angle}deg)`, borderLeftColor: ping.color, filter: `drop-shadow(0 0 6px ${ping.color})` }}
+              />
+              {ping.name && <span className="ping-name" style={{ background: ping.color }}>{ping.name}</span>}
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
