@@ -87,3 +87,107 @@
 .stats-import-error {
   color: #c0392b;
 }
+
+.stats-player-toggle {
+  padding: 0.3rem 0.8rem;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.stats-player-toggle:hover {
+  background: var(--hover);
+}
+
+.stats-player-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-top: 0.2rem;
+}
+
+.stats-player-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.88rem;
+}
+
+.stats-player-row--active {
+  border-color: var(--text);
+}
+
+.stats-player-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+}
+
+.stats-player-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stats-player-meta {
+  color: var(--subtle);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.stats-player-actions {
+  display: flex;
+  gap: 0.35rem;
+  flex-shrink: 0;
+}
+
+.stats-player-btn {
+  padding: 0.2rem 0.55rem;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+
+.stats-player-btn:hover {
+  background: var(--hover);
+}
+
+.stats-player-btn--danger {
+  color: #c0392b;
+  border-color: rgba(192, 57, 43, 0.4);
+}
+
+.stats-player-btn--danger:hover {
+  background: rgba(192, 57, 43, 0.1);
+}
+
+.stats-player-edit-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.stats-player-new {
+  justify-content: center;
+  color: var(--subtle);
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.stats-player-new:hover {
+  background: var(--hover);
+}

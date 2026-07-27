@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import type { StatsApi } from './stats/useStats'
 import { computeSection1, computeSection2, computeRecords, type CompletionSummary } from './stats/compute'
 import './SettingsModal.css'
@@ -37,14 +37,34 @@ function SummaryRow({ label, summary }: { label: string; summary: CompletionSumm
   )
 }
 
+function nextPlayerName(existing: { name: string }[]): string {
+  const names = new Set(existing.map(p => p.name))
+  let n = existing.length + 1
+  while (names.has(`Player ${n}`)) n++
+  return `Player ${n}`
+}
+
 export default function StatsScreen({ stats, lastPuzzlesCount, onClose }: Props) {
   const [nameInput, setNameInput] = useState(stats.profileName)
   const [importError, setImportError] = useState<string | null>(null)
+  const [showPlayers, setShowPlayers] = useState(false)
+  const [editingName, setEditingName] = useState<string | null>(null)
+  const [editValue, setEditValue] = useState('')
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null)
+
+  // Keep the top name field in sync when the active player changes via the
+  // manager (select, delete, or renaming the current player).
+  useEffect(() => { setNameInput(stats.profileName) }, [stats.profileName])
 
   function commitName() {
     const trimmed = nameInput.trim()
     if (trimmed && trimmed !== stats.profileName) stats.setProfileName(trimmed)
     else setNameInput(stats.profileName)
+  }
+
+  function saveRename() {
+    if (editingName && editValue.trim()) stats.renameProfile(editingName, editValue.trim())
+    setEditingName(null)
   }
 
   async function handleImport(e: React.ChangeEvent<HTMLInputElement>) {
@@ -84,6 +104,66 @@ export default function StatsScreen({ stats, lastPuzzlesCount, onClose }: Props)
           />
         </div>
         <p className="setting-hint">Stats live on this computer, filed under this name. There are no accounts.</p>
+
+        <div className="setting-row">
+          <span className="setting-label">Player</span>
+          <button className="stats-player-toggle" onClick={() => { setShowPlayers(v => !v); setEditingName(null); setConfirmDelete(null) }}>
+            {showPlayers ? 'Done' : 'Manage players'}
+          </button>
+        </div>
+        {showPlayers && (
+          <div className="stats-player-list">
+            {stats.profiles.map(p => {
+              const isCurrent = p.name === stats.profileName
+              if (editingName === p.name) {
+                return (
+                  <div key={p.name} className="stats-player-row">
+                    <input
+                      className="stats-name-input stats-player-edit-input"
+                      type="text"
+                      value={editValue}
+                      autoFocus
+                      onChange={e => setEditValue(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') saveRename(); if (e.key === 'Escape') setEditingName(null) }}
+                    />
+                    <div className="stats-player-actions">
+                      <button className="stats-player-btn" onClick={saveRename}>Save</button>
+                      <button className="stats-player-btn" onClick={() => setEditingName(null)}>Cancel</button>
+                    </div>
+                  </div>
+                )
+              }
+              return (
+                <div key={p.name} className={`stats-player-row${isCurrent ? ' stats-player-row--active' : ''}`}>
+                  <div className="stats-player-main">
+                    <span className="stats-player-name">{p.name}{isCurrent ? ' (current)' : ''}</span>
+                    <span className="stats-player-meta">
+                      {p.sessions} {p.sessions === 1 ? 'session' : 'sessions'}
+                      {p.createdAt ? ` · since ${formatDate(p.createdAt)}` : ''}
+                    </span>
+                  </div>
+                  <div className="stats-player-actions">
+                    {!isCurrent && (
+                      <button className="stats-player-btn" onClick={() => stats.selectProfile(p.name)}>Select</button>
+                    )}
+                    <button className="stats-player-btn" onClick={() => { setEditingName(p.name); setEditValue(p.name); setConfirmDelete(null) }}>Rename</button>
+                    {confirmDelete === p.name ? (
+                      <>
+                        <button className="stats-player-btn stats-player-btn--danger" onClick={() => { stats.deleteProfile(p.name); setConfirmDelete(null) }}>Confirm</button>
+                        <button className="stats-player-btn" onClick={() => setConfirmDelete(null)}>Keep</button>
+                      </>
+                    ) : (
+                      <button className="stats-player-btn stats-player-btn--danger" onClick={() => { setConfirmDelete(p.name); setEditingName(null) }}>Delete</button>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
+            <button className="stats-player-row stats-player-new" onClick={() => stats.selectProfile(nextPlayerName(stats.profiles))}>
+              + New player
+            </button>
+          </div>
+        )}
 
         <div className="setting-divider" />
 

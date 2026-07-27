@@ -65,6 +65,55 @@ export function switchActiveProfile(file: StatsFile, name: string): StatsFile {
   return { ...file, activeProfile: trimmed }
 }
 
+// Renames the active profile in place, carrying its stats to the new name. If
+// the new name already belongs to another profile, switches to that one
+// instead (rather than overwriting it), so no stats are ever lost.
+export function renameActiveProfile(file: StatsFile, name: string): StatsFile {
+  const trimmed = name.trim() || DEFAULT_PROFILE_NAME
+  const current = file.activeProfile
+  if (trimmed === current) return file
+  const profiles = { ...file.profiles }
+  if (profiles[trimmed]) {
+    return { ...file, activeProfile: trimmed }
+  }
+  const prof = profiles[current] ?? createEmptyProfile(current)
+  delete profiles[current]
+  profiles[trimmed] = { ...prof, name: trimmed }
+  return { ...file, activeProfile: trimmed, profiles }
+}
+
+// Renames any profile by name (not only the active one), keeping its stats. A
+// no-op if the new name is blank, unchanged, or already taken.
+export function renameProfile(file: StatsFile, oldName: string, newName: string): StatsFile {
+  const trimmed = newName.trim()
+  if (!trimmed || trimmed === oldName) return file
+  if (!file.profiles[oldName] || file.profiles[trimmed]) return file
+  const profiles = { ...file.profiles }
+  const prof = profiles[oldName]
+  delete profiles[oldName]
+  profiles[trimmed] = { ...prof, name: trimmed }
+  const activeProfile = file.activeProfile === oldName ? trimmed : file.activeProfile
+  return { ...file, profiles, activeProfile }
+}
+
+// Deletes a profile. If it was the active one, the first remaining profile
+// becomes active. Deleting the last profile leaves a fresh default in place.
+export function deleteProfile(file: StatsFile, name: string): StatsFile {
+  if (!file.profiles[name]) return file
+  const profiles = { ...file.profiles }
+  delete profiles[name]
+  const remaining = Object.keys(profiles)
+  if (remaining.length === 0) {
+    return {
+      ...file,
+      profiles: { [DEFAULT_PROFILE_NAME]: createEmptyProfile(DEFAULT_PROFILE_NAME) },
+      activeProfile: DEFAULT_PROFILE_NAME,
+    }
+  }
+  const activeProfile = file.activeProfile === name ? remaining[0] : file.activeProfile
+  return { ...file, profiles, activeProfile }
+}
+
 export function exportStatsFile(file: StatsFile): void {
   const blob = new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' })
   const url = URL.createObjectURL(blob)

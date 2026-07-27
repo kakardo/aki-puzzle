@@ -1,7 +1,8 @@
 import { useCallback, useRef, useState } from 'react'
 import type { StatsFile, ProfileStats, SessionRecord, CompletionRecord, PuzzleMode, StatsHooks } from './types'
 import {
-  loadStatsFile, saveStatsFile, ensureProfile, switchActiveProfile,
+  loadStatsFile, saveStatsFile, ensureProfile, renameActiveProfile, switchActiveProfile,
+  renameProfile as renameProfileInFile, deleteProfile as deleteProfileInFile,
   exportStatsFile, importStatsFile,
 } from './storage'
 
@@ -13,7 +14,11 @@ function newId(): string {
 export interface StatsApi extends StatsHooks {
   profileName: string
   profile: ProfileStats
+  profiles: { name: string; sessions: number; completions: number; createdAt: number | null }[]
   setProfileName(name: string): void
+  selectProfile(name: string): void
+  renameProfile(oldName: string, newName: string): void
+  deleteProfile(name: string): void
   exportFile(): void
   importFile(file: File): Promise<void>
 }
@@ -39,8 +44,23 @@ export function useStats(): StatsApi {
     persist({ ...current, profiles: { ...current.profiles, [name]: updated } })
   }, [persist])
 
+  // Renaming keeps your stats: the current profile is renamed in place rather
+  // than switching to a new, empty one.
   const setProfileName = useCallback((name: string) => {
+    persist(renameActiveProfile({ ...fileRef.current, profiles: { ...fileRef.current.profiles } }, name))
+  }, [persist])
+
+  // Switch to a different player (creating a fresh one if the name is new).
+  const selectProfile = useCallback((name: string) => {
     persist(switchActiveProfile({ ...fileRef.current, profiles: { ...fileRef.current.profiles } }, name))
+  }, [persist])
+
+  const renameProfile = useCallback((oldName: string, newName: string) => {
+    persist(renameProfileInFile(fileRef.current, oldName, newName))
+  }, [persist])
+
+  const deleteProfile = useCallback((name: string) => {
+    persist(deleteProfileInFile(fileRef.current, name))
   }, [persist])
 
   const startSession = useCallback((pieceCount: number, cols: number, rows: number, mode: PuzzleMode): string => {
@@ -123,11 +143,21 @@ export function useStats(): StatsApi {
 
   const profileName = file.activeProfile
   const profile = file.profiles[profileName] ?? ensureProfile(file, profileName)
+  const profiles = Object.values(file.profiles).map(p => {
+    // Older profiles predate createdAt; fall back to their earliest activity.
+    const times = [...p.sessions.map(s => s.startedAt), ...p.completions.map(c => c.date)]
+    const createdAt = p.createdAt ?? (times.length ? Math.min(...times) : null)
+    return { name: p.name, sessions: p.sessions.length, completions: p.completions.length, createdAt }
+  })
 
   return {
     profileName,
     profile,
+    profiles,
     setProfileName,
+    selectProfile,
+    renameProfile,
+    deleteProfile,
     startSession,
     onPiecesPlaced,
     onPickupNotPlaced,
