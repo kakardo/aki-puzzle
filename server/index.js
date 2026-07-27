@@ -6,7 +6,11 @@
 // src/multiplayer/protocol.ts for the full message reference.
 
 import { WebSocketServer } from 'ws'
+import http from 'node:http'
+import fs from 'node:fs'
+import path from 'node:path'
 import os from 'node:os'
+import { fileURLToPath } from 'node:url'
 import { PROTOCOL_VERSION, DEFAULT_PORT } from './protocol.js'
 import {
   createStore, addPlayer, removePlayer, createSession,
@@ -14,12 +18,69 @@ import {
   membersOf, snapshot,
 } from './session.js'
 
-const port = Number(process.argv[2]) || DEFAULT_PORT
+const port = Number(process.env.PORT) || Number(process.argv[2]) || DEFAULT_PORT
+// When set (by the host launcher), every join must present this code. Left
+// empty for plain LAN play, where no code is required.
+const ROOM_CODE = process.env.ZENPIECE_ROOM_CODE || ''
 const store = createStore()
 const sockets = new Map() // playerId -> ws
 
+// The built app is served from dist so the whole game is one origin on one
+// port: the browser reaches the app and the WebSocket at the same address,
+// which keeps internet play working without TLS or a second service.
+const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const distDir = path.join(__dirname, '..', 'dist')
+
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript',
+  '.css': 'text/css',
+  '.json': 'application/json',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.webp': 'image/webp',
+  '.woff': 'font/woff',
+  '.woff2': 'font/woff2',
+  '.map': 'application/json',
+}
+
+function serveStatic(req, res) {
+  try {
+    const urlPath = decodeURIComponent((req.url || '/').split('?')[0])
+    let filePath = path.join(distDir, urlPath)
+    // path.join collapses any ".." so a request can never escape distDir
+    if (filePath !== distDir && !filePath.startsWith(distDir + path.sep)) {
+      res.writeHead(403); res.end('Forbidden'); return
+    }
+    let stat = fs.existsSync(filePath) && fs.statSync(filePath)
+    if (stat && stat.isDirectory()) {
+      filePath = path.join(filePath, 'index.html')
+      stat = fs.existsSync(filePath) && fs.statSync(filePath)
+    }
+    if (!stat) {
+      // Single page app: unknown paths fall back to index.html
+      filePath = path.join(distDir, 'index.html')
+      if (!fs.existsSync(filePath)) {
+        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' })
+        res.end('ZenPiece server is running. Build the app first (npm run host) to play here.')
+        return
+      }
+    }
+    const ext = path.extname(filePath).toLowerCase()
+    res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' })
+    fs.createReadStream(filePath).pipe(res)
+  } catch {
+    res.writeHead(500); res.end('Server error')
+  }
+}
+
+const httpServer = http.createServer(serveStatic)
 const wss = new WebSocketServer({
-  port,
+  server: httpServer,
   maxPayload: 20 * 1024 * 1024, // session snapshots carry the puzzle image
 })
 
@@ -51,6 +112,11 @@ function handleMessage(ws, msg) {
   if (msg.type === 'join') {
     if (msg.protocolVersion !== PROTOCOL_VERSION) {
       send(ws, { type: 'error', code: 'version_mismatch', message: 'Update the app: the host is running a different version.' })
+      ws.close()
+      return
+    }
+    if (ROOM_CODE && String(msg.code ?? '') !== ROOM_CODE) {
+      send(ws, { type: 'error', code: 'bad_code', message: 'Wrong room code.' })
       ws.close()
       return
     }
@@ -198,6 +264,9 @@ const heartbeat = setInterval(() => {
 
 wss.on('close', () => clearInterval(heartbeat))
 
-console.log(`ZenPiece server listening on port ${port}`)
-const ips = lanAddresses()
-if (ips.length > 0) console.log(`Friends on your network can join with: ${ips.join(' or ')}`)
+httpServer.listen(port, () => {
+  console.log(`ZenPiece server listening on port ${port}`)
+  const ips = lanAddresses()
+  if (ips.length > 0) console.log(`Friends on your network can join with: ${ips.join(' or ')}`)
+  if (ROOM_CODE) console.log(`Room code: ${ROOM_CODE}`)
+})

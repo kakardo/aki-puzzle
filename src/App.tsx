@@ -128,6 +128,16 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
   const [mpPanel, setMpPanel] = useState<'none' | 'host' | 'join'>('none')
   const [mpName, setMpName] = useState('')
   const [mpJoinAddress, setMpJoinAddress] = useState('')
+  // Served mode: the app was loaded from the host program (a production build),
+  // so the server is this same origin. In dev it runs under Vite and connects
+  // to a separately started server by typed address.
+  const served = import.meta.env.PROD
+  const servedAddress = `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://${window.location.host}`
+  // A shared link may carry the room code as ?code=..., so friends who open it
+  // never type anything.
+  const [mpRoomCode, setMpRoomCode] = useState(() => {
+    try { return new URLSearchParams(window.location.search).get('code') ?? '' } catch { return '' }
+  })
   const [mpStarting, setMpStarting] = useState(false)
   const [mpStartError, setMpStartError] = useState<string | null>(null)
   // Re-encoded image the host actually plays with, so every client cuts
@@ -221,7 +231,7 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
     try {
       const netImage = await prepareNetImage(imageSrc)
       hostSeedRef.current = Date.now() >>> 0
-      await mp.host(mpName.trim() || 'Host')
+      await mp.host(mpName.trim() || 'Host', served ? servedAddress : 'localhost', mpRoomCode.trim())
       setHostNetImage(netImage)
       setAccentColor(matchedQuick ? matchedQuick.dark : CUSTOM_DARK)
       setPuzzleHasProgress(false)
@@ -234,13 +244,14 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
   }
 
   async function handleJoinStart() {
-    if (!mpJoinAddress.trim()) return
+    const address = served ? servedAddress : mpJoinAddress.trim()
+    if (!address) return
     setMpStartError(null)
     setMpStarting(true)
     try {
-      await mp.join(mpName.trim() || 'Player', mpJoinAddress.trim())
+      await mp.join(mpName.trim() || 'Player', address, mpRoomCode.trim())
     } catch {
-      setMpStartError('Could not reach that address. Check it and that the host is running.')
+      setMpStartError(served ? 'Could not reach the game. Check the room code and that the host is still running.' : 'Could not reach that address. Check it and that the host is running.')
     } finally {
       setMpStarting(false)
     }
@@ -248,7 +259,7 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
 
   function handleRejoin() {
     if (mp.mode === 'host') {
-      mp.host(mpName.trim() || 'Host')
+      mp.host(mpName.trim() || 'Host', served ? servedAddress : 'localhost', mpRoomCode.trim())
     } else {
       handleJoinStart()
     }
@@ -557,7 +568,11 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
 
           {mpPanel === 'host' && (
             <div className="mp-panel">
-              <p className="mp-panel-hint">Run <code>npm run server</code> in the project folder, then press Start.</p>
+              <p className="mp-panel-hint">
+                {served
+                  ? 'Press Start, then share your link so friends can join.'
+                  : <>Run <code>npm run server</code> in the project folder, then press Start.</>}
+              </p>
               <input
                 className="mp-name-input"
                 type="text"
@@ -565,6 +580,15 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
                 value={mpName}
                 onChange={e => setMpName(e.target.value)}
               />
+              {served && (
+                <input
+                  className="mp-name-input"
+                  type="text"
+                  placeholder="Room code"
+                  value={mpRoomCode}
+                  onChange={e => setMpRoomCode(e.target.value)}
+                />
+              )}
               {mpStartError && <p className="mp-error">{mpStartError}</p>}
               <div className="mp-panel-actions">
                 <button className="mp-cancel-btn" onClick={() => { setMpPanel('none'); setMpStartError(null) }}>Cancel</button>
@@ -584,17 +608,27 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
                 value={mpName}
                 onChange={e => setMpName(e.target.value)}
               />
-              <input
-                className="mp-address-input"
-                type="text"
-                placeholder="Host address, e.g. 192.168.1.23"
-                value={mpJoinAddress}
-                onChange={e => setMpJoinAddress(e.target.value)}
-              />
+              {served ? (
+                <input
+                  className="mp-name-input"
+                  type="text"
+                  placeholder="Room code"
+                  value={mpRoomCode}
+                  onChange={e => setMpRoomCode(e.target.value)}
+                />
+              ) : (
+                <input
+                  className="mp-address-input"
+                  type="text"
+                  placeholder="Host address, e.g. 192.168.1.23"
+                  value={mpJoinAddress}
+                  onChange={e => setMpJoinAddress(e.target.value)}
+                />
+              )}
               {mpStartError && <p className="mp-error">{mpStartError}</p>}
               <div className="mp-panel-actions">
                 <button className="mp-cancel-btn" onClick={() => { setMpPanel('none'); setMpStartError(null) }}>Cancel</button>
-                <button className="mp-start-btn" disabled={mpStarting || !mpJoinAddress.trim()} onClick={handleJoinStart}>
+                <button className="mp-start-btn" disabled={mpStarting || (!served && !mpJoinAddress.trim())} onClick={handleJoinStart}>
                   {mpStarting ? 'Joining...' : 'Join'}
                 </button>
               </div>

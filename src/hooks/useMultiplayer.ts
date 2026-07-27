@@ -25,8 +25,8 @@ export type Multiplayer = {
   sessionEpoch: number
   lanAddresses: string[]
   errorMessage: string | null
-  host(name: string, address?: string): Promise<void>
-  join(name: string, address: string): Promise<void>
+  host(name: string, address?: string, code?: string): Promise<void>
+  join(name: string, address: string, code?: string): Promise<void>
   createSession(config: PuzzleConfig, pieces: NetPiece[], groups: Groups): void
   leave(): void
   requestSync(): void
@@ -57,6 +57,7 @@ export function useMultiplayer(): Multiplayer {
   const playersRef = useRef<Player[]>([])
   const nameRef = useRef('')
   const addressRef = useRef('')
+  const codeRef = useRef('')
   const leftRef = useRef(false)
   const reconnectAttemptRef = useRef(0)
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -143,7 +144,9 @@ export function useMultiplayer(): Multiplayer {
         return
       }
       case 'error':
-        if (msg.code === 'version_mismatch' || msg.code === 'session_full') {
+        if (msg.code === 'version_mismatch' || msg.code === 'session_full' || msg.code === 'bad_code') {
+          // Terminal: the server rejected the join, so do not keep retrying.
+          leftRef.current = true
           setErrorMessage(msg.message)
           setStatus('failed')
         }
@@ -159,7 +162,7 @@ export function useMultiplayer(): Multiplayer {
     })
     transportRef.current = transport
     await transport.connect(address)
-    transport.send({ type: 'join', protocolVersion: PROTOCOL_VERSION, name })
+    transport.send({ type: 'join', protocolVersion: PROTOCOL_VERSION, name, code: codeRef.current || undefined })
   }
 
   function scheduleReconnect() {
@@ -181,12 +184,13 @@ export function useMultiplayer(): Multiplayer {
     }, delay)
   }
 
-  async function start(asMode: 'host' | 'guest', name: string, address: string) {
+  async function start(asMode: 'host' | 'guest', name: string, address: string, code: string) {
     leftRef.current = false
     modeRef.current = asMode
     setMode(asMode)
     nameRef.current = name
     addressRef.current = address
+    codeRef.current = code
     reconnectAttemptRef.current = 0
     setErrorMessage(null)
     setStatus('connecting')
@@ -199,8 +203,8 @@ export function useMultiplayer(): Multiplayer {
     }
   }
 
-  const hostFn = useCallback((name: string, address = 'localhost') => start('host', name, address), [])
-  const joinFn = useCallback((name: string, address: string) => start('guest', name, address), [])
+  const hostFn = useCallback((name: string, address = 'localhost', code = '') => start('host', name, address, code), [])
+  const joinFn = useCallback((name: string, address: string, code = '') => start('guest', name, address, code), [])
 
   const createSessionFn = useCallback((config: PuzzleConfig, pieces: NetPiece[], groups: Groups) => {
     hostConfigRef.current = config

@@ -3,7 +3,7 @@
 // hand when the protocol changes, and bump PROTOCOL_VERSION on breaking
 // changes so old clients get a clear error instead of silent weirdness.
 
-export const PROTOCOL_VERSION = 2
+export const PROTOCOL_VERSION = 3
 export const DEFAULT_PORT = 8421
 
 // Fixed palette, assigned first free slot by the server. Mirrored in
@@ -46,7 +46,7 @@ export type NetSession = {
 }
 
 export type ClientMessage =
-  | { type: 'join'; protocolVersion: number; name: string }
+  | { type: 'join'; protocolVersion: number; name: string; code?: string }
   | { type: 'create_session'; config: PuzzleConfig; pieces: NetPiece[]; groups: Groups }
   | { type: 'grab'; pieceId: string }
   | { type: 'drag'; pieceId: string; x: number; y: number }

@@ -15,6 +15,7 @@ _tmp
 dist
 dist-ssr
 *.local
+vite.config.*.timestamp-*
 
 # Editor directories and files
 .vscode/*

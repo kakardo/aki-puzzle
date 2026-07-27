@@ -188,6 +188,25 @@ Open the app on another device on the same network, click **Join**, and type in 
 
 The server runs on port `8421` by default. If that port is already in use, pass a different one: `node server/index.js 9000`.
 
+## Playing over the internet
+
+Friends who are not on your Wi-Fi can join too, and they install nothing: they just open a link in a browser. Only the host runs a program.
+
+```bash
+npm run host
+```
+
+This builds the app and starts one local program that serves both the game and the multiplayer server on a single port. It then tries to open that port on your router automatically (UPnP) and prints two things: a short room code, and a link to share, for example `http://<your-public-ip>:8421/?code=1234`. Send the link to your friend. They open it, you open the same link, one of you clicks **Host** and the others click **Join**. The room code is already in the link, so nobody has to type it; if you share a plain link instead, they enter the code by hand.
+
+The room code keeps a stranger who stumbles onto the open port from dropping into your game.
+
+A few things to know:
+
+- If your router has UPnP turned off, the program cannot open the port for you. It will print the one port-forward rule to add in your router settings (forward external port `8421` to this computer), then the same link will work.
+- This needs a real public IP from your internet provider. Some connections (often mobile or certain fibre plans) sit behind carrier-grade NAT, where port forwarding cannot work at all.
+- Your home IP can change over time, so the link may differ between sessions.
+- The connection is plain `http`, so the browser shows a "not secure" label. That is expected here and does not affect play.
+
 ## Stats
 
 Open the menu and choose **Stats** to see your puzzle history.
