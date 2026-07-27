@@ -13,7 +13,7 @@ import os from 'node:os'
 import { fileURLToPath } from 'node:url'
 import { PROTOCOL_VERSION, DEFAULT_PORT } from './protocol.js'
 import {
-  createStore, addPlayer, removePlayer, createSession,
+  createStore, addPlayer, removePlayer, createSession, endSession,
   tryGrab, isHolder, applyDrag, applyDrop, releaseLock,
   membersOf, snapshot,
 } from './session.js'
@@ -97,6 +97,10 @@ function broadcast(msg, exceptPlayerId = null) {
   }
 }
 
+function isLocal(addr) {
+  return addr === '127.0.0.1' || addr === '::1' || addr === '::ffff:127.0.0.1'
+}
+
 function lanAddresses() {
   const out = []
   for (const ifaces of Object.values(os.networkInterfaces())) {
@@ -115,7 +119,9 @@ function handleMessage(ws, msg) {
       ws.close()
       return
     }
-    if (ROOM_CODE && String(msg.code ?? '') !== ROOM_CODE) {
+    // The host runs the server on their own machine, so a connection from
+    // localhost is trusted and needs no code. Remote joiners still do.
+    if (ROOM_CODE && !isLocal(ws.remoteAddress) && String(msg.code ?? '') !== ROOM_CODE) {
       send(ws, { type: 'error', code: 'bad_code', message: 'Wrong room code.' })
       ws.close()
       return
@@ -146,16 +152,23 @@ function handleMessage(ws, msg) {
 
   switch (msg.type) {
     case 'create_session': {
-      // Only honoured while no session exists: the first host, or the host
-      // restoring after a server restart. A new puzzle means a new server.
-      if (store.session) {
-        send(ws, { type: 'error', code: 'session_exists', message: 'A puzzle is already running on this server.' })
-        return
-      }
+      // Only the host may create or replace the puzzle. The first creator
+      // becomes the host and, in host mode, can start a new puzzle at any time.
+      if (store.hostId && store.hostId !== playerId) return
       if (!msg.config || !Array.isArray(msg.pieces)) return
+      store.hostId = playerId
       createSession(store, msg.config, msg.pieces, msg.groups ?? {})
       broadcast({ type: 'session_created', session: snapshot(store) }, playerId)
       console.log(`session created: ${msg.config.cols}x${msg.config.rows} pieces`)
+      return
+    }
+    case 'end_session': {
+      // Host stepped back to pick a new puzzle. Clear the board but keep
+      // everyone connected; joiners wait for the next puzzle.
+      if (playerId !== store.hostId) return
+      endSession(store)
+      broadcast({ type: 'session_ended' }, playerId)
+      console.log('session ended by host')
       return
     }
     case 'grab': {
@@ -224,11 +237,19 @@ function dropConnection(ws) {
   for (const groupId of releasedGroups) {
     broadcast({ type: 'piece_released', playerId, pieceId: groupId })
   }
+  // If the host drops, the puzzle has no owner: end it so joiners wait for a
+  // new host session rather than being stuck on a frozen board.
+  if (playerId === store.hostId) {
+    endSession(store)
+    store.hostId = null
+    broadcast({ type: 'session_ended' })
+  }
   broadcast({ type: 'player_left', playerId })
   if (player) console.log(`left: ${player.name} (${store.players.size} connected)`)
 }
 
-wss.on('connection', ws => {
+wss.on('connection', (ws, req) => {
+  ws.remoteAddress = req.socket.remoteAddress
   ws.isAlive = true
   ws.on('pong', () => { ws.isAlive = true })
   ws.on('message', data => {

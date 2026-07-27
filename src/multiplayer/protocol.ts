@@ -3,7 +3,7 @@
 // hand when the protocol changes, and bump PROTOCOL_VERSION on breaking
 // changes so old clients get a clear error instead of silent weirdness.
 
-export const PROTOCOL_VERSION = 3
+export const PROTOCOL_VERSION = 4
 export const DEFAULT_PORT = 8421
 
 // Fixed palette, assigned first free slot by the server. Mirrored in
@@ -53,6 +53,7 @@ export type ClientMessage =
   | { type: 'drop'; pieceId: string; pieces: NetPiece[]; groups: Groups }
   | { type: 'release'; pieceId: string }
   | { type: 'ping'; x: number; y: number }
+  | { type: 'end_session' }
   | { type: 'request_sync' }
 
 export type ServerMessage =
@@ -67,4 +68,5 @@ export type ServerMessage =
   | { type: 'piece_dropped'; playerId: string; pieces: NetPiece[]; groups: Groups }
   | { type: 'piece_released'; playerId: string; pieceId: string }
   | { type: 'player_pinged'; playerId: string; x: number; y: number }
+  | { type: 'session_ended' }
   | { type: 'error'; code: string; message: string }

@@ -11,7 +11,17 @@ export function createStore() {
     session: null,
     players: new Map(), // playerId -> { id, name, color }
     locks: new Map(),   // groupId -> playerId
+    // The player who created the current session. Host mode stays connected
+    // across puzzles, so this drives who may replace or end the session.
+    hostId: null,
   }
+}
+
+// Clears the running puzzle but keeps players connected, so a host can go back
+// and start a different puzzle without dropping anyone.
+export function endSession(store) {
+  store.session = null
+  store.locks.clear()
 }
 
 // Same convention as the client: a piece with no entry is its own group.

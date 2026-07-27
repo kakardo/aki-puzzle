@@ -8,8 +8,22 @@ import DebugView from './debug/DebugView'
 import { useMultiplayer, type MultiplayerStatus, type MultiplayerMode } from './hooks/useMultiplayer'
 import { prepareNetImage } from './multiplayer/image'
 import type { BoardMultiplayer } from './multiplayer/types'
-import type { NetSession, Player } from './multiplayer/protocol'
+import type { Groups, NetPiece, NetSession, Player } from './multiplayer/protocol'
 import './App.css'
+
+// The multiplayer name is the active stats profile, so players never type it.
+function readStatsName(): string {
+  try {
+    const raw = localStorage.getItem('zenpiece-stats')
+    if (raw) {
+      const parsed = JSON.parse(raw)
+      if (parsed && typeof parsed.activeProfile === 'string' && parsed.activeProfile.trim()) {
+        return parsed.activeProfile.trim()
+      }
+    }
+  } catch {}
+  return ''
+}
 
 function calcGrid(count: number, aspect: number): { cols: number; rows: number } {
   const cols = Math.max(2, Math.round(Math.sqrt(count * aspect)))
@@ -125,8 +139,9 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
 
   // Multiplayer
   const mp = useMultiplayer()
-  const [mpPanel, setMpPanel] = useState<'none' | 'host' | 'join'>('none')
-  const [mpName, setMpName] = useState('')
+  const [mpPanel, setMpPanel] = useState<'none' | 'join'>('none')
+  // Name comes from the stats profile (readStatsName), so multiplayer never
+  // asks for it.
   const [mpJoinAddress, setMpJoinAddress] = useState('')
   // Served mode: the app was loaded from the host program (a production build),
   // so the server is this same origin. In dev it runs under Vite and connects
@@ -138,12 +153,28 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
   const [mpRoomCode, setMpRoomCode] = useState(() => {
     try { return new URLSearchParams(window.location.search).get('code') ?? '' } catch { return '' }
   })
+  // The host opens the plain URL and needs no code (the server trusts its own
+  // machine). Only a shared ?code=... link marks a joiner: they get a focused
+  // join screen, never the picker.
+  const joinIntent = served && (() => {
+    try { return new URLSearchParams(window.location.search).has('code') } catch { return false }
+  })()
   const [mpStarting, setMpStarting] = useState(false)
   const [mpStartError, setMpStartError] = useState<string | null>(null)
   // Re-encoded image the host actually plays with, so every client cuts
   // pieces from pixel identical source data (see multiplayer/image.ts)
   const [hostNetImage, setHostNetImage] = useState<string | null>(null)
   const hostSeedRef = useRef(0)
+  // Host mode: a persistent hosting state that outlives any single puzzle. The
+  // host stays connected across puzzles; joiners follow from one to the next.
+  const [hostMode, setHostMode] = useState(false)
+  // Bumps on every fresh puzzle so the board remounts cleanly.
+  const [boardEpoch, setBoardEpoch] = useState(0)
+  // Set when hosting the current in-progress puzzle from the menu, so the board
+  // is seeded with the exact state instead of a fresh scatter.
+  const hostSnapshotRef = useRef<(() => { pieces: NetPiece[]; groups: Groups; genWidth: number; genHeight: number }) | null>(null)
+  const promotedStateRef = useRef<{ pieces: NetPiece[]; groups: Groups; genWidth: number; genHeight: number } | null>(null)
+  const pendingHostRef = useRef<{ snap: { pieces: NetPiece[]; groups: Groups; genWidth: number; genHeight: number }; netImage: string } | null>(null)
   const prevPlayersRef = useRef<Player[]>([])
   const [toast, setToast] = useState<string | null>(null)
 
@@ -179,6 +210,54 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
     const t = setTimeout(() => setToast(null), 3000)
     return () => clearTimeout(t)
   }, [toast])
+
+  // A shared join link drops the visitor straight into the session, connecting
+  // automatically with the stats profile name. They never see the program.
+  const joinAttemptedRef = useRef(false)
+  useEffect(() => {
+    if (!joinIntent || joinAttemptedRef.current || mp.mode !== 'solo') return
+    joinAttemptedRef.current = true
+    mp.join(readStatsName() || 'Player', servedAddress, mpRoomCode.trim()).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [joinIntent])
+
+  // Hosting the current puzzle from the menu completes here once the server
+  // accepts the connection, so a failure surfaces cleanly instead of a dead
+  // board. Fresh host-mode puzzles create their session on generation instead.
+  useEffect(() => {
+    const pending = pendingHostRef.current
+    if (!pending) return
+    if (mp.status === 'connected' && mp.selfId) {
+      pendingHostRef.current = null
+      mp.createSession(
+        {
+          imageDataUrl: pending.netImage,
+          cols: grid!.cols,
+          rows: grid!.rows,
+          seed: hostSeedRef.current,
+          knobSize: settings.knobSize,
+          pieceStyle: settings.pieceStyle,
+          pieceSpacing: settings.pieceSpacing,
+          edgeStyle: settings.edgeStyle,
+          genWidth: pending.snap.genWidth,
+          genHeight: pending.snap.genHeight,
+        },
+        pending.snap.pieces,
+        pending.snap.groups,
+      )
+      promotedStateRef.current = pending.snap
+      setHostNetImage(pending.netImage)
+      setBoardEpoch(e => e + 1)
+      setHostMode(true)
+      setMpStarting(false)
+    } else if (mp.status === 'failed') {
+      pendingHostRef.current = null
+      mp.leave()
+      setMpStartError(mp.errorMessage ?? 'Could not host the game.')
+      setMpStarting(false)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mp.status, mp.selfId])
 
   const pieceCount = parseInt(input)
   const validCount = !isNaN(pieceCount) && pieceCount >= 2 && pieceCount <= 10000
@@ -217,41 +296,90 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
     } catch {}
   }
 
-  function handleStart() {
+  async function handleStart() {
     if (!canStart) return
     setAccentColor(matchedQuick ? matchedQuick.dark : CUSTOM_DARK)
     setPuzzleHasProgress(false)
+    // Every game gets a known seed so all clients cut identical pieces.
+    hostSeedRef.current = Date.now() >>> 0
+    setBoardEpoch(e => e + 1)
+    if (hostMode) {
+      // In host mode a puzzle is shared fresh the instant it starts.
+      promotedStateRef.current = null
+      setMpStartError(null)
+      setMpStarting(true)
+      try {
+        const netImage = await prepareNetImage(imageSrc!)
+        setHostNetImage(netImage)
+        setGrid(calcGrid(pieceCount, imageAspect))
+      } catch {
+        setMpStartError('Could not prepare the image.')
+      } finally {
+        setMpStarting(false)
+      }
+      return
+    }
+    setHostNetImage(null)
     setGrid(calcGrid(pieceCount, imageAspect))
   }
 
-  async function handleHostStart() {
-    if (!imageSrc || !validCount) return
+  // Enter host mode from the start page: connect as the host (no code needed on
+  // your own machine) and stay connected across puzzles.
+  async function enterHostMode() {
     setMpStartError(null)
     setMpStarting(true)
     try {
-      const netImage = await prepareNetImage(imageSrc)
-      hostSeedRef.current = Date.now() >>> 0
-      await mp.host(mpName.trim() || 'Host', served ? servedAddress : 'localhost', mpRoomCode.trim())
-      setHostNetImage(netImage)
-      setAccentColor(matchedQuick ? matchedQuick.dark : CUSTOM_DARK)
-      setPuzzleHasProgress(false)
-      setGrid(calcGrid(pieceCount, imageAspect))
+      promotedStateRef.current = null
+      await mp.host(readStatsName() || 'Host', served ? servedAddress : 'localhost', mpRoomCode.trim())
+      setHostMode(true)
     } catch {
-      setMpStartError('Could not reach the server. Run "npm run server" first, then try again.')
+      // Reset to a clean solo state so a failed host attempt never blocks play.
+      mp.leave()
+      setHostMode(false)
+      setMpStartError('Could not reach the server. Run "npm run host" first.')
     } finally {
       setMpStarting(false)
     }
   }
 
-  async function handleJoinStart() {
-    const address = served ? servedAddress : mpJoinAddress.trim()
-    if (!address) return
+  // Host the current in-progress puzzle from the in-game menu, keeping its exact
+  // state. Completes in the pending-host effect once connected.
+  async function handleHostThisGame() {
+    if (!imageSrc || !grid) return
+    const snap = hostSnapshotRef.current?.()
+    if (!snap) return
     setMpStartError(null)
     setMpStarting(true)
     try {
-      await mp.join(mpName.trim() || 'Player', address, mpRoomCode.trim())
+      const netImage = await prepareNetImage(imageSrc)
+      pendingHostRef.current = { snap, netImage }
+      await mp.host(readStatsName() || 'Host', served ? servedAddress : 'localhost', mpRoomCode.trim())
     } catch {
-      setMpStartError(served ? 'Could not reach the game. Check the room code and that the host is still running.' : 'Could not reach that address. Check it and that the host is running.')
+      pendingHostRef.current = null
+      mp.leave()
+      setMpStartError('Could not reach the server. Run "npm run host" first.')
+      setMpStarting(false)
+    }
+  }
+
+  function stopHosting() {
+    mp.leave()
+    setHostMode(false)
+    promotedStateRef.current = null
+    setHostNetImage(null)
+    setGrid(null)
+  }
+
+  async function handleJoinStart() {
+    const address = served ? servedAddress : mpJoinAddress.trim()
+    if (!address) return
+    joinAttemptedRef.current = true
+    setMpStartError(null)
+    setMpStarting(true)
+    try {
+      await mp.join(readStatsName() || 'Player', address, mpRoomCode.trim())
+    } catch {
+      setMpStartError(served ? 'Could not reach the game. Check that the host is still running.' : 'Could not reach that address. Check it and that the host is running.')
     } finally {
       setMpStarting(false)
     }
@@ -259,13 +387,22 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
 
   function handleRejoin() {
     if (mp.mode === 'host') {
-      mp.host(mpName.trim() || 'Host', served ? servedAddress : 'localhost', mpRoomCode.trim())
+      mp.host(readStatsName() || 'Host', served ? servedAddress : 'localhost', mpRoomCode.trim())
     } else {
       handleJoinStart()
     }
   }
 
   function handleLeaveBoard() {
+    // In host mode, leaving a puzzle ends it but keeps you hosting, so you can
+    // start another and joiners follow. Otherwise it is a normal leave.
+    if (hostMode) {
+      mp.endSession()
+      promotedStateRef.current = null
+      setHostNetImage(null)
+      setGrid(null)
+      return
+    }
     if (mp.mode !== 'solo') {
       mp.leave()
       setHostNetImage(null)
@@ -275,6 +412,26 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
   }
 
   function buildHostMultiplayer(): BoardMultiplayer {
+    // Two ways to host: from the menu, the current puzzle is seeded from its
+    // snapshot (session already created). From the start page, a fresh puzzle
+    // creates its session on generation.
+    const snap = promotedStateRef.current
+    if (snap) {
+      return {
+        role: 'host',
+        selfColor: mp.selfColor ?? '#888',
+        selfName: mp.players.find(p => p.id === mp.selfId)?.name ?? '',
+        seed: hostSeedRef.current,
+        genWidth: snap.genWidth,
+        genHeight: snap.genHeight,
+        initialPieces: snap.pieces,
+        initialGroups: snap.groups,
+        initialHeld: {},
+        api: mp.api,
+        setRemoteHandlers: mp.setRemoteHandlers,
+        setBoardStateProvider: mp.setBoardStateProvider,
+      }
+    }
     return {
       role: 'host',
       selfColor: mp.selfColor ?? '#888',
@@ -304,7 +461,7 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
             genHeight,
           },
           pieces,
-          {}
+          {},
         )
       },
     }
@@ -337,8 +494,9 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
     }
   }
 
-  // Guests never see the image picker: the whole screen is either "waiting
-  // for the host" or the board itself, driven entirely by the session
+  // A joiner who is connected but has no puzzle yet: either the host has not
+  // started, or they stepped back between puzzles. This is observer/waiting:
+  // they see the host's game the moment it starts, and cannot influence setup.
   if (mp.mode === 'guest' && !mp.session) {
     return (
       <div className="mp-waiting-screen">
@@ -346,8 +504,11 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
         <p className="mp-waiting-text">
           {mp.status === 'failed'
             ? (mp.errorMessage ?? 'Could not connect.')
-            : 'Waiting for the host to start a puzzle...'}
+            : 'You are viewing the host’s game.'}
         </p>
+        {mp.status !== 'failed' && (
+          <p className="mp-waiting-text">Waiting for the host to start a puzzle. You will join automatically.</p>
+        )}
         {mp.players.length > 0 && (
           <PlayerOverlay
             players={mp.players}
@@ -359,14 +520,33 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
           />
         )}
         {toast && <div className="mp-toast">{toast}</div>}
-        <button className="mp-cancel-btn" onClick={() => { mp.leave(); setMpPanel('none') }}>Leave</button>
+        {mp.status === 'failed' && (
+          <button className="mp-start-btn" onClick={() => { joinAttemptedRef.current = false; handleJoinStart() }}>Try again</button>
+        )}
+        {!joinIntent && (
+          <button className="mp-cancel-btn" onClick={() => { mp.leave(); setMpPanel('none') }}>Leave</button>
+        )}
+      </div>
+    )
+  }
+
+  // Opened via a shared join link: connect automatically (name from stats), and
+  // show only a connecting state. Never the program.
+  if (joinIntent && mp.mode === 'solo') {
+    return (
+      <div className="mp-waiting-screen">
+        <h1>ZenPiece</h1>
+        <p className="mp-waiting-text">Connecting to the game...</p>
       </div>
     )
   }
 
   const isGuestBoard = mp.mode === 'guest' && mp.session !== null
-  const isHostBoard = mp.mode === 'host' && grid !== null && hostNetImage !== null
-  const isSoloBoard = mp.mode === 'solo' && grid !== null && imageSrc !== null
+  // Host mode makes a puzzle a host board. The solo board also covers the brief
+  // window while hosting-from-the-menu is connecting (mode flips to host before
+  // hostMode is set), so the board never flashes away.
+  const isHostBoard = hostMode && grid !== null && hostNetImage !== null
+  const isSoloBoard = !hostMode && !isGuestBoard && grid !== null && imageSrc !== null
 
   if (isGuestBoard || isHostBoard || isSoloBoard) {
     const session = mp.session
@@ -384,7 +564,7 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
     return (
       <>
         <PuzzleBoard
-          key={isGuestBoard ? `guest-${mp.sessionEpoch}` : 'local'}
+          key={isGuestBoard ? `guest-${mp.sessionEpoch}` : (isHostBoard ? `host-${boardEpoch}` : 'local')}
           imageSrc={boardImageSrc}
           cols={boardCols}
           rows={boardRows}
@@ -411,8 +591,11 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
           multiplayer={multiplayerProp}
           statsHooks={stats}
           coPlayerNames={coPlayerNames}
+          seed={hostSeedRef.current}
+          onHostGame={handleHostThisGame}
+          hostSnapshotRef={hostSnapshotRef}
         />
-        {mp.mode !== 'solo' && (
+        {mp.mode !== 'solo' && mp.players.length > 1 && (
           <PlayerOverlay
             players={mp.players}
             selfId={mp.selfId}
@@ -550,92 +733,63 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
 
       {imageSrc && mpPanel === 'none' && (
         <div className="start-section start-actions">
-          <button className="start-btn" disabled={!canStart} onClick={handleStart}>
-            Start puzzling
+          <button className="start-btn" disabled={!canStart || mpStarting} onClick={handleStart}>
+            {mpStarting ? 'Starting...' : (hostMode ? 'Start hosted puzzle' : 'Start puzzling')}
           </button>
+          {hostMode && mpStartError && <p className="mp-error">{mpStartError}</p>}
         </div>
       )}
 
-      {canStart && (
-        <div className="start-section mp-section">
-          {mpPanel === 'none' && (
-            <div className="mp-toggle-row">
-              <span className="mp-toggle-label">or play together</span>
-              <button className="mp-toggle-btn" onClick={() => setMpPanel('host')}>Host</button>
-              <button className="mp-toggle-btn" onClick={() => setMpPanel('join')}>Join</button>
+      <div className="start-section mp-section">
+        {hostMode ? (
+          <div className="mp-panel">
+            <p className="mp-panel-hint">You are hosting. Choose a picture and start a puzzle; anyone with your link joins automatically.</p>
+            <div className="mp-panel-actions">
+              <button className="mp-cancel-btn" onClick={stopHosting}>Stop hosting</button>
             </div>
-          )}
-
-          {mpPanel === 'host' && (
-            <div className="mp-panel">
-              <p className="mp-panel-hint">
-                {served
-                  ? 'Press Start, then share your link so friends can join.'
-                  : <>Run <code>npm run server</code> in the project folder, then press Start.</>}
-              </p>
-              <input
-                className="mp-name-input"
-                type="text"
-                placeholder="Your name"
-                value={mpName}
-                onChange={e => setMpName(e.target.value)}
-              />
-              {served && (
-                <input
-                  className="mp-name-input"
-                  type="text"
-                  placeholder="Room code"
-                  value={mpRoomCode}
-                  onChange={e => setMpRoomCode(e.target.value)}
-                />
-              )}
-              {mpStartError && <p className="mp-error">{mpStartError}</p>}
-              <div className="mp-panel-actions">
-                <button className="mp-cancel-btn" onClick={() => { setMpPanel('none'); setMpStartError(null) }}>Cancel</button>
-                <button className="mp-start-btn" disabled={mpStarting} onClick={handleHostStart}>
-                  {mpStarting ? 'Starting...' : 'Start'}
-                </button>
+          </div>
+        ) : (
+          <>
+            {mpPanel === 'none' && (
+              <div className="mp-toggle-row">
+                <span className="mp-toggle-label">or</span>
+                <button className="mp-toggle-btn" disabled={mpStarting} onClick={enterHostMode}>Host a game</button>
+                <button className="mp-toggle-btn" onClick={() => { setMpStartError(null); setMpPanel('join') }}>Join</button>
               </div>
-            </div>
-          )}
+            )}
+            {mpPanel === 'none' && mpStartError && <p className="mp-error">{mpStartError}</p>}
 
-          {mpPanel === 'join' && (
-            <div className="mp-panel">
-              <input
-                className="mp-name-input"
-                type="text"
-                placeholder="Your name"
-                value={mpName}
-                onChange={e => setMpName(e.target.value)}
-              />
-              {served ? (
-                <input
-                  className="mp-name-input"
-                  type="text"
-                  placeholder="Room code"
-                  value={mpRoomCode}
-                  onChange={e => setMpRoomCode(e.target.value)}
-                />
-              ) : (
-                <input
-                  className="mp-address-input"
-                  type="text"
-                  placeholder="Host address, e.g. 192.168.1.23"
-                  value={mpJoinAddress}
-                  onChange={e => setMpJoinAddress(e.target.value)}
-                />
-              )}
-              {mpStartError && <p className="mp-error">{mpStartError}</p>}
-              <div className="mp-panel-actions">
-                <button className="mp-cancel-btn" onClick={() => { setMpPanel('none'); setMpStartError(null) }}>Cancel</button>
-                <button className="mp-start-btn" disabled={mpStarting || (!served && !mpJoinAddress.trim())} onClick={handleJoinStart}>
-                  {mpStarting ? 'Joining...' : 'Join'}
-                </button>
+            {mpPanel === 'join' && (
+              <div className="mp-panel">
+                {served ? (
+                  <input
+                    className="mp-name-input"
+                    type="text"
+                    placeholder="Room code"
+                    value={mpRoomCode}
+                    onChange={e => setMpRoomCode(e.target.value)}
+                  />
+                ) : (
+                  <input
+                    className="mp-address-input"
+                    type="text"
+                    placeholder="Host address, e.g. 192.168.1.23"
+                    value={mpJoinAddress}
+                    onChange={e => setMpJoinAddress(e.target.value)}
+                  />
+                )}
+                {mpStartError && <p className="mp-error">{mpStartError}</p>}
+                <div className="mp-panel-actions">
+                  <button className="mp-cancel-btn" onClick={() => { setMpPanel('none'); setMpStartError(null) }}>Cancel</button>
+                  <button className="mp-start-btn" disabled={mpStarting || (!served && !mpJoinAddress.trim())} onClick={handleJoinStart}>
+                    {mpStarting ? 'Joining...' : 'Join'}
+                  </button>
+                </div>
               </div>
-            </div>
-          )}
-        </div>
-      )}
+            )}
+          </>
+        )}
+      </div>
 
       {showSettings && (
         <SettingsModal

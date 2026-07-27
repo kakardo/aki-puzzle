@@ -28,6 +28,7 @@ export type Multiplayer = {
   host(name: string, address?: string, code?: string): Promise<void>
   join(name: string, address: string, code?: string): Promise<void>
   createSession(config: PuzzleConfig, pieces: NetPiece[], groups: Groups): void
+  endSession(): void
   leave(): void
   requestSync(): void
   api: MultiplayerSendApi
@@ -105,6 +106,11 @@ export function useMultiplayer(): Multiplayer {
       case 'session_created':
         setSession(msg.session)
         setSessionEpoch(e => e + 1)
+        return
+      case 'session_ended':
+        // The host stepped back to pick a new puzzle. Stay connected; joiners
+        // fall to the waiting screen until the next session arrives.
+        setSession(null)
         return
       case 'player_joined':
         updatePlayers([...playersRef.current.filter(p => p.id !== msg.player.id), msg.player])
@@ -211,6 +217,12 @@ export function useMultiplayer(): Multiplayer {
     transportRef.current?.send({ type: 'create_session', config, pieces, groups })
   }, [])
 
+  const endSessionFn = useCallback(() => {
+    hostConfigRef.current = null
+    transportRef.current?.send({ type: 'end_session' })
+    setSession(null)
+  }, [])
+
   const leaveFn = useCallback(() => {
     leftRef.current = true
     if (reconnectTimerRef.current) {
@@ -315,6 +327,7 @@ export function useMultiplayer(): Multiplayer {
     host: hostFn,
     join: joinFn,
     createSession: createSessionFn,
+    endSession: endSessionFn,
     leave: leaveFn,
     requestSync: requestSyncFn,
     api: apiRef.current,

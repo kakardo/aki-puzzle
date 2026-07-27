@@ -11,6 +11,7 @@ import type { DebugActions } from './debug/useDebugActions'
 import Fireworks from './animations/Fireworks'
 import Ripple from './animations/Ripple'
 import type { BoardMultiplayer, RemoteHandlers } from './multiplayer/types'
+import type { Groups, NetPiece } from './multiplayer/protocol'
 import type { StatsHooks } from './stats/types'
 
 interface Props {
@@ -41,6 +42,12 @@ interface Props {
   multiplayer?: BoardMultiplayer
   statsHooks?: StatsHooks
   coPlayerNames?: string[]
+  // Generation seed, so every client cuts identical pieces.
+  seed?: number
+  // Menu action to host the current game (available while playing solo).
+  onHostGame?: () => void
+  // Lets the app read the current board state to host it exactly as it is.
+  hostSnapshotRef?: React.MutableRefObject<(() => { pieces: NetPiece[]; groups: Groups; genWidth: number; genHeight: number }) | null>
 }
 
 // Snap radius scales with piece size but never drops below a fixed number of
@@ -65,7 +72,7 @@ function formatProgress(locked: number, total: number, mode: ProgressMode, showP
   return `${locked}/${total}${pctStr}`
 }
 
-export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep, resolution, panStep, knobSize, pieceStyle, pieceSpacing, edgeStyle, showBorder, rippleQuality, progressMode, progressPercent, theme, accentColor, pingNameOnRing = true, pingNameOnArrow = false, onReset, onOpenSettings, onOpenStats, onToggleTheme, onPieceMoved, debugActionsRef, multiplayer, statsHooks, coPlayerNames }: Props) {
+export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep, resolution, panStep, knobSize, pieceStyle, pieceSpacing, edgeStyle, showBorder, rippleQuality, progressMode, progressPercent, theme, accentColor, pingNameOnRing = true, pingNameOnArrow = false, onReset, onOpenSettings, onOpenStats, onToggleTheme, onPieceMoved, debugActionsRef, multiplayer, statsHooks, coPlayerNames, seed, onHostGame, hostSnapshotRef }: Props) {
   const [pieces, setPieces] = useState<PieceData[]>([])
   const [groups, setGroups] = useState<Record<string, string>>({})
   const [solved, setSolved] = useState(false)
@@ -146,11 +153,24 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
   useEffect(() => { groupsRef.current = groups }, [groups])
   useEffect(() => { piecesRef.current = pieces }, [pieces])
 
+  // Expose the live board so the app can host this exact game on demand.
+  useEffect(() => {
+    if (!hostSnapshotRef) return
+    hostSnapshotRef.current = () => ({
+      pieces: piecesRef.current.map(p => ({ id: p.id, x: p.x, y: p.y, locked: p.locked })),
+      groups: groupsRef.current,
+      genWidth: genSizeRef.current.width,
+      genHeight: genSizeRef.current.height,
+    })
+    return () => { if (hostSnapshotRef) hostSnapshotRef.current = null }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Reposition unlocked pieces when piece spacing changes mid-puzzle
   useEffect(() => {
     const img = sourceImageRef.current
     if (!img || pieces.length === 0) return
-    const { pieces: newLayouts } = generatePieceLayout(img, COLS, ROWS, genSizeRef.current.width, genSizeRef.current.height, knobSize, pieceSpacing)
+    const { pieces: newLayouts } = generatePieceLayout(img, COLS, ROWS, genSizeRef.current.width, genSizeRef.current.height, knobSize, pieceSpacing, mpRef.current?.seed ?? seed)
     setPieces(prev => prev.map(p => {
       if (p.locked) return p
       const layout = newLayouts.find(l => l.id === p.id)
@@ -212,7 +232,7 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
         x: (genW - COLS * ps.pw) / 2,
         y: (genH - ROWS * ps.ph) / 2,
       })
-      const { pieces: layouts, pw, ph, padding } = generatePieceLayout(img, COLS, ROWS, genW, genH, knobSize, pieceSpacing, mp?.seed)
+      const { pieces: layouts, pw, ph, padding } = generatePieceLayout(img, COLS, ROWS, genW, genH, knobSize, pieceSpacing, mp?.seed ?? seed)
       layoutRef.current = layouts
 
       setLoadingSteps([
@@ -1053,6 +1073,11 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
               {onOpenStats && (
                 <button className="dropdown-item" onClick={() => { onOpenStats(); setMenuOpen(false) }}>
                   Stats
+                </button>
+              )}
+              {!multiplayer && onHostGame && (
+                <button className="dropdown-item" onClick={() => { onHostGame(); setMenuOpen(false) }}>
+                  Host this game
                 </button>
               )}
               <div className="dropdown-divider" />

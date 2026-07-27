@@ -34,7 +34,7 @@ const PORT = Number(process.env.PORT) || DEFAULT_PORT
 // A short numeric code so a stranger who stumbles onto the open port cannot
 // drop into your game. It travels in the share link as ?code=... so friends
 // never have to type it.
-const CODE = process.env.ZENPIECE_ROOM_CODE || String(Math.floor(1000 + Math.random() * 9000))
+const CODE = process.env.ZENPIECE_ROOM_CODE || String(Math.floor(100000 + Math.random() * 900000))
 
 process.env.PORT = String(PORT)
 process.env.ZENPIECE_ROOM_CODE = CODE
@@ -79,22 +79,27 @@ const upnp = await openPort()
 const line = '======================================================'
 console.log('')
 console.log(line)
-console.log(' ZenPiece is hosting')
+console.log(' ZenPiece server is running')
 console.log(line)
-console.log(` Room code: ${CODE}`)
-if (lan) console.log(` Same Wi-Fi:        http://${lan}:${PORT}/?code=${CODE}`)
+console.log('')
+console.log(' 1. Play: open the game in your browser')
+console.log(`      http://localhost:${PORT}/`)
+console.log('    Start a puzzle, then use "Host a game" on the start page')
+console.log('    or "Host this game" in the menu. No code needed here.')
+console.log('')
+console.log(' 2. Invite: send a friend one of these links, nothing to type')
+if (lan) console.log(`      Same Wi-Fi:        http://${lan}:${PORT}/?code=${CODE}`)
 if (upnp.ok && upnp.ip) {
-  console.log(` Over the internet: http://${upnp.ip}:${PORT}/?code=${CODE}`)
-  console.log('')
-  console.log(' Share the internet link. Your friend just opens it in a browser.')
+  console.log(`      Over the internet: http://${upnp.ip}:${PORT}/?code=${CODE}`)
 } else {
-  console.log('')
-  console.log(' Could not open the port automatically (UPnP is off or unsupported).')
-  console.log(` To play over the internet, forward external port ${PORT} to this`)
-  console.log(` computer${lan ? ` (${lan}:${PORT})` : ''} in your router settings, then share:`)
-  console.log(`   http://YOUR_PUBLIC_IP:${PORT}/?code=${CODE}`)
-  console.log(' Find YOUR_PUBLIC_IP by searching "what is my ip" in a browser.')
+  console.log(`      Same computer only unless you open the port. UPnP could not`)
+  console.log(`      do it, so forward external port ${PORT} to this computer`)
+  console.log(`      ${lan ? `(${lan}:${PORT}) ` : ''}in your router, then share:`)
+  console.log(`      http://YOUR_PUBLIC_IP:${PORT}/?code=${CODE}`)
+  console.log('      (find YOUR_PUBLIC_IP by searching "what is my ip")')
 }
+console.log('')
+console.log(` Room code: ${CODE}  (already included in the invite link)`)
 console.log(line)
-console.log(' Keep this window open while you play. Close it to end the session.')
+console.log(' Keep this window open while you play. Close it to stop the server.')
 console.log('')

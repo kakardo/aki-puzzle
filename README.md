@@ -196,7 +196,18 @@ Friends who are not on your Wi-Fi can join too, and they install nothing: they j
 npm run host
 ```
 
-This builds the app and starts one local program that serves both the game and the multiplayer server on a single port. It then tries to open that port on your router automatically (UPnP) and prints two things: a short room code, and a link to share, for example `http://<your-public-ip>:8421/?code=1234`. Send the link to your friend. They open it, you open the same link, one of you clicks **Host** and the others click **Join**. The room code is already in the link, so nobody has to type it; if you share a plain link instead, they enter the code by hand.
+This builds the app and starts one local program that serves both the game and the multiplayer server on a single port. It then tries to open that port on your router automatically (UPnP) and prints a six digit room code plus a share link.
+
+You (the host) just open `http://localhost:8421/` on the same machine. Because the server runs on your machine, it trusts you without a code. You host in either of two ways:
+
+- From the start page, click **Host a game**, then choose a picture and start. The puzzle is shared the instant it starts.
+- While already playing a puzzle, open the menu and pick **Host this game**. The game is shared exactly as it is, with everything you have already assembled kept in place.
+
+Either way you are then in host mode, which stays active across puzzles: leave one from the menu and start another, and everyone follows you into it.
+
+Friends open the share link, for example `http://<your-public-ip>:8421/?code=123456`. It connects them automatically. While you are in a puzzle they play with you; between puzzles they see "you are viewing the host's game, waiting for the host to start" and are pulled into the next one. No picture picker, no host controls.
+
+The player name comes from your stats profile and the room code rides in the share link, so nobody types anything: not you, not your friends.
 
 The room code keeps a stranger who stumbles onto the open port from dropping into your game.
 
