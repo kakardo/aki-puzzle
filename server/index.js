@@ -126,7 +126,7 @@ function handleMessage(ws, msg) {
       ws.close()
       return
     }
-    const player = addPlayer(store, msg.name)
+    const player = addPlayer(store, msg.name, msg.pid)
     if (!player) {
       send(ws, { type: 'error', code: 'session_full', message: 'This session is full.' })
       ws.close()

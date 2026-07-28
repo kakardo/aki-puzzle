@@ -41,7 +41,12 @@ export interface SessionRecord {
 }
 
 export interface ProfileStats {
+  // Stable short id (4 chars, base62). The real key for everything: names may
+  // repeat or change, the id does not. Shared between machines in multiplayer.
+  id: string
   name: string
+  // false = one of your own players; true = someone you have played with.
+  friend: boolean
   createdAt: number
   completions: CompletionRecord[]
   sessions: SessionRecord[]
@@ -49,7 +54,8 @@ export interface ProfileStats {
 
 export interface StatsFile {
   version: number
-  activeProfile: string
+  activeProfileId: string
+  // Keyed by profile id.
   profiles: Record<string, ProfileStats>
 }
 
@@ -60,13 +66,27 @@ export interface StatsHooks {
   startSession(pieceCount: number, cols: number, rows: number, mode: PuzzleMode): string
   onPiecesPlaced(sessionId: string, count: number): void
   onPickupNotPlaced(sessionId: string): void
-  completeSession(sessionId: string, chainMergeMax: number, coPlayers: string[]): void
+  completeSession(sessionId: string, chainMergeMax: number, coPlayers: { id: string; name: string }[]): void
   abandonSession(sessionId: string): void
 }
 
-export function createEmptyProfile(name: string): ProfileStats {
+// Short, human-shareable id: 4 chars of digits and letters (base62).
+const ID_ALPHABET = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
+export function generateProfileId(taken: Set<string> = new Set()): string {
+  for (let attempt = 0; attempt < 50; attempt++) {
+    let id = ''
+    for (let i = 0; i < 4; i++) id += ID_ALPHABET[Math.floor(Math.random() * ID_ALPHABET.length)]
+    if (!taken.has(id)) return id
+  }
+  // Extremely unlikely fallback: extend length rather than loop forever.
+  return `${Date.now().toString(36).slice(-4)}`
+}
+
+export function createEmptyProfile(name: string, id: string, friend = false): ProfileStats {
   return {
+    id,
     name,
+    friend,
     createdAt: Date.now(),
     completions: [],
     sessions: [],

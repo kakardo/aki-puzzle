@@ -3,7 +3,7 @@
 // hand when the protocol changes, and bump PROTOCOL_VERSION on breaking
 // changes so old clients get a clear error instead of silent weirdness.
 
-export const PROTOCOL_VERSION = 4
+export const PROTOCOL_VERSION = 5
 export const DEFAULT_PORT = 8421
 
 // Fixed palette, assigned first free slot by the server. Mirrored in
@@ -19,7 +19,9 @@ export type Groups = Record<string, string>
 // tabs, display size) is derived locally from the seed.
 export type NetPiece = { id: string; x: number; y: number; locked: boolean }
 
-export type Player = { id: string; name: string; color: string }
+// id is the ephemeral connection id (new every reconnect). pid is the player's
+// persistent profile id, shared so stats can be attributed across machines.
+export type Player = { id: string; pid: string; name: string; color: string }
 
 // Everything a joiner needs to cut the identical puzzle. genWidth/genHeight
 // is the host's window size at generation time: piece sizes and the layout
@@ -46,7 +48,7 @@ export type NetSession = {
 }
 
 export type ClientMessage =
-  | { type: 'join'; protocolVersion: number; name: string; code?: string }
+  | { type: 'join'; protocolVersion: number; name: string; pid?: string; code?: string }
   | { type: 'create_session'; config: PuzzleConfig; pieces: NetPiece[]; groups: Groups }
   | { type: 'grab'; pieceId: string }
   | { type: 'drag'; pieceId: string; x: number; y: number }

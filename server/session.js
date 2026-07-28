@@ -39,12 +39,13 @@ export function membersOf(store, pieceId) {
   return members
 }
 
-export function addPlayer(store, name) {
+export function addPlayer(store, name, pid) {
   if (store.players.size >= PLAYER_COLORS.length) return null
   const taken = new Set([...store.players.values()].map(p => p.color))
   const color = PLAYER_COLORS.find(c => !taken.has(c))
   const player = {
     id: randomUUID(),
+    pid: String(pid || '').slice(0, 8),
     name: String(name || 'Player').slice(0, 24),
     color,
   }

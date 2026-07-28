@@ -11,18 +11,19 @@ import type { BoardMultiplayer } from './multiplayer/types'
 import type { Groups, NetPiece, NetSession, Player } from './multiplayer/protocol'
 import './App.css'
 
-// The multiplayer name is the active stats profile, so players never type it.
-function readStatsName(): string {
+// The active player, read straight from storage so it is current right after a
+// profile change (state updates are async, localStorage is written first).
+function readActiveProfile(): { id: string; name: string } {
   try {
     const raw = localStorage.getItem('zenpiece-stats')
     if (raw) {
       const parsed = JSON.parse(raw)
-      if (parsed && typeof parsed.activeProfile === 'string' && parsed.activeProfile.trim()) {
-        return parsed.activeProfile.trim()
-      }
+      const id = parsed?.activeProfileId
+      const prof = id && parsed.profiles ? parsed.profiles[id] : null
+      if (prof && typeof prof.name === 'string') return { id, name: prof.name || 'Player' }
     }
   } catch {}
-  return ''
+  return { id: '', name: 'Player' }
 }
 
 function calcGrid(count: number, aspect: number): { cols: number; rows: number } {
@@ -140,9 +141,12 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
   // Multiplayer
   const mp = useMultiplayer()
   const [mpPanel, setMpPanel] = useState<'none' | 'join'>('none')
-  // Name comes from the stats profile (readStatsName), so multiplayer never
-  // asks for it.
+  // Name comes from the stats profile (readStatsName) for hosting. Joiners get
+  // a join screen to pick or rename a player, tracked here.
   const [mpJoinAddress, setMpJoinAddress] = useState('')
+  // Blank by default: the joiner either clicks a saved player or types a new
+  // name. A profile is only created when they actually join.
+  const [joinName, setJoinName] = useState('')
   // Served mode: the app was loaded from the host program (a production build),
   // so the server is this same origin. In dev it runs under Vite and connects
   // to a separately started server by typed address.
@@ -211,15 +215,9 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
     return () => clearTimeout(t)
   }, [toast])
 
-  // A shared join link drops the visitor straight into the session, connecting
-  // automatically with the stats profile name. They never see the program.
+  // A shared join link shows a join screen: pick which saved player to play as
+  // (or make a new one) and confirm. No auto-connect.
   const joinAttemptedRef = useRef(false)
-  useEffect(() => {
-    if (!joinIntent || joinAttemptedRef.current || mp.mode !== 'solo') return
-    joinAttemptedRef.current = true
-    mp.join(readStatsName() || 'Player', servedAddress, mpRoomCode.trim()).catch(() => {})
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [joinIntent])
 
   // Hosting the current puzzle from the menu completes here once the server
   // accepts the connection, so a failure surfaces cleanly instead of a dead
@@ -330,7 +328,7 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
     setMpStarting(true)
     try {
       promotedStateRef.current = null
-      await mp.host(readStatsName() || 'Host', served ? servedAddress : 'localhost', mpRoomCode.trim())
+      await mp.host(readActiveProfile().name || 'Host', served ? servedAddress : 'localhost', mpRoomCode.trim(), readActiveProfile().id)
       setHostMode(true)
     } catch {
       // Reset to a clean solo state so a failed host attempt never blocks play.
@@ -353,7 +351,7 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
     try {
       const netImage = await prepareNetImage(imageSrc)
       pendingHostRef.current = { snap, netImage }
-      await mp.host(readStatsName() || 'Host', served ? servedAddress : 'localhost', mpRoomCode.trim())
+      await mp.host(readActiveProfile().name || 'Host', served ? servedAddress : 'localhost', mpRoomCode.trim(), readActiveProfile().id)
     } catch {
       pendingHostRef.current = null
       mp.leave()
@@ -377,7 +375,7 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
     setMpStartError(null)
     setMpStarting(true)
     try {
-      await mp.join(readStatsName() || 'Player', address, mpRoomCode.trim())
+      await mp.join(readActiveProfile().name || 'Player', address, mpRoomCode.trim(), readActiveProfile().id)
     } catch {
       setMpStartError(served ? 'Could not reach the game. Check that the host is still running.' : 'Could not reach that address. Check it and that the host is running.')
     } finally {
@@ -385,9 +383,24 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
     }
   }
 
+  // Join as an existing saved player (by id).
+  function joinAsPlayer(id: string) {
+    stats.selectProfile(id)
+    handleJoinStart()
+  }
+
+  // Join under a freshly typed name: a new player is created only now, on the
+  // actual join, so opening the screen never leaves empty profiles behind.
+  function joinAsNewName() {
+    const nm = joinName.trim()
+    if (!nm) return
+    stats.createPlayer(nm)
+    handleJoinStart()
+  }
+
   function handleRejoin() {
     if (mp.mode === 'host') {
-      mp.host(readStatsName() || 'Host', served ? servedAddress : 'localhost', mpRoomCode.trim())
+      mp.host(readActiveProfile().name || 'Host', served ? servedAddress : 'localhost', mpRoomCode.trim(), readActiveProfile().id)
     } else {
       handleJoinStart()
     }
@@ -530,13 +543,46 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
     )
   }
 
-  // Opened via a shared join link: connect automatically (name from stats), and
-  // show only a connecting state. Never the program.
+  // Opened via a shared join link: choose which saved player to play as (or
+  // make a new one), then join. Never the program.
   if (joinIntent && mp.mode === 'solo') {
     return (
       <div className="mp-waiting-screen">
         <h1>ZenPiece</h1>
-        <p className="mp-waiting-text">Connecting to the game...</p>
+        <p className="mp-waiting-text">Join the game</p>
+        <div className="mp-panel">
+          <input
+            className="mp-name-input"
+            type="text"
+            placeholder="Type a name to play as"
+            value={joinName}
+            autoFocus
+            onChange={e => setJoinName(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter') joinAsNewName() }}
+          />
+          {mpStartError && <p className="mp-error">{mpStartError}</p>}
+          <div className="mp-panel-actions">
+            <button className="mp-start-btn" disabled={mpStarting || !joinName.trim()} onClick={joinAsNewName}>
+              {mpStarting ? 'Joining...' : 'Join'}
+            </button>
+          </div>
+          {stats.profiles.some(p => !p.friend) && (
+            <div className="join-profiles">
+              <span className="join-profiles-label">Or pick a saved player:</span>
+              {stats.profiles.filter(p => !p.friend).sort((a, b) => b.sessions - a.sessions).map(p => (
+                <button
+                  key={p.id}
+                  className="join-profile-row"
+                  disabled={mpStarting}
+                  onClick={() => joinAsPlayer(p.id)}
+                >
+                  <span className="join-profile-name">{p.name}</span>
+                  <span className="join-profile-count">{p.sessions} {p.sessions === 1 ? 'session' : 'sessions'}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     )
   }
@@ -559,7 +605,9 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
     const boardEdgeStyle = (isGuestBoard ? session!.config.edgeStyle : settings.edgeStyle) as EdgeStyle
     const multiplayerProp: BoardMultiplayer | undefined =
       isHostBoard ? buildHostMultiplayer() : (isGuestBoard ? buildGuestMultiplayer(session!) : undefined)
-    const coPlayerNames = mp.mode !== 'solo' ? mp.players.filter(p => p.id !== mp.selfId).map(p => p.name) : []
+    const coPlayers = mp.mode !== 'solo'
+      ? mp.players.filter(p => p.id !== mp.selfId).map(p => ({ id: p.pid, name: p.name }))
+      : []
 
     return (
       <>
@@ -590,7 +638,7 @@ function StartScreen({ onDebug }: { onDebug: () => void }) {
           onPieceMoved={() => setPuzzleHasProgress(true)}
           multiplayer={multiplayerProp}
           statsHooks={stats}
-          coPlayerNames={coPlayerNames}
+          coPlayers={coPlayers}
           seed={hostSeedRef.current}
           onHostGame={handleHostThisGame}
           hostSnapshotRef={hostSnapshotRef}

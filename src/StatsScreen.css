@@ -146,6 +146,18 @@
   font-variant-numeric: tabular-nums;
 }
 
+.stats-player-id {
+  color: var(--subtle);
+  font-size: 0.72rem;
+  font-family: var(--font-mono, monospace);
+}
+
+.stats-friends-label {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border);
+}
+
 .stats-player-actions {
   display: flex;
   gap: 0.35rem;

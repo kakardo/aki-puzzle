@@ -41,7 +41,7 @@ interface Props {
   debugActionsRef?: React.MutableRefObject<DebugActions | null>
   multiplayer?: BoardMultiplayer
   statsHooks?: StatsHooks
-  coPlayerNames?: string[]
+  coPlayers?: { id: string; name: string }[]
   // Generation seed, so every client cuts identical pieces.
   seed?: number
   // Menu action to host the current game (available while playing solo).
@@ -72,7 +72,7 @@ function formatProgress(locked: number, total: number, mode: ProgressMode, showP
   return `${locked}/${total}${pctStr}`
 }
 
-export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep, resolution, panStep, knobSize, pieceStyle, pieceSpacing, edgeStyle, showBorder, rippleQuality, progressMode, progressPercent, theme, accentColor, pingNameOnRing = true, pingNameOnArrow = false, onReset, onOpenSettings, onOpenStats, onToggleTheme, onPieceMoved, debugActionsRef, multiplayer, statsHooks, coPlayerNames, seed, onHostGame, hostSnapshotRef }: Props) {
+export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep, resolution, panStep, knobSize, pieceStyle, pieceSpacing, edgeStyle, showBorder, rippleQuality, progressMode, progressPercent, theme, accentColor, pingNameOnRing = true, pingNameOnArrow = false, onReset, onOpenSettings, onOpenStats, onToggleTheme, onPieceMoved, debugActionsRef, multiplayer, statsHooks, coPlayers, seed, onHostGame, hostSnapshotRef }: Props) {
   const [pieces, setPieces] = useState<PieceData[]>([])
   const [groups, setGroups] = useState<Record<string, string>>({})
   const [solved, setSolved] = useState(false)
@@ -765,7 +765,7 @@ export default function PuzzleBoard({ imageSrc, cols: COLS, rows: ROWS, zoomStep
         triggerSolve(next.find(p => p.id === id)!)
         if (statsSessionIdRef.current && !statsCompletedRef.current) {
           statsCompletedRef.current = true
-          statsHooks?.completeSession(statsSessionIdRef.current, chainMergeMaxRef.current, coPlayerNames ?? [])
+          statsHooks?.completeSession(statsSessionIdRef.current, chainMergeMaxRef.current, coPlayers ?? [])
         }
       }
 

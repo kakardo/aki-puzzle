@@ -25,8 +25,8 @@ export type Multiplayer = {
   sessionEpoch: number
   lanAddresses: string[]
   errorMessage: string | null
-  host(name: string, address?: string, code?: string): Promise<void>
-  join(name: string, address: string, code?: string): Promise<void>
+  host(name: string, address?: string, code?: string, pid?: string): Promise<void>
+  join(name: string, address: string, code?: string, pid?: string): Promise<void>
   createSession(config: PuzzleConfig, pieces: NetPiece[], groups: Groups): void
   endSession(): void
   leave(): void
@@ -59,6 +59,7 @@ export function useMultiplayer(): Multiplayer {
   const nameRef = useRef('')
   const addressRef = useRef('')
   const codeRef = useRef('')
+  const pidRef = useRef('')
   const leftRef = useRef(false)
   const reconnectAttemptRef = useRef(0)
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -168,7 +169,7 @@ export function useMultiplayer(): Multiplayer {
     })
     transportRef.current = transport
     await transport.connect(address)
-    transport.send({ type: 'join', protocolVersion: PROTOCOL_VERSION, name, code: codeRef.current || undefined })
+    transport.send({ type: 'join', protocolVersion: PROTOCOL_VERSION, name, pid: pidRef.current || undefined, code: codeRef.current || undefined })
   }
 
   function scheduleReconnect() {
@@ -190,13 +191,14 @@ export function useMultiplayer(): Multiplayer {
     }, delay)
   }
 
-  async function start(asMode: 'host' | 'guest', name: string, address: string, code: string) {
+  async function start(asMode: 'host' | 'guest', name: string, address: string, code: string, pid: string) {
     leftRef.current = false
     modeRef.current = asMode
     setMode(asMode)
     nameRef.current = name
     addressRef.current = address
     codeRef.current = code
+    pidRef.current = pid
     reconnectAttemptRef.current = 0
     setErrorMessage(null)
     setStatus('connecting')
@@ -209,8 +211,8 @@ export function useMultiplayer(): Multiplayer {
     }
   }
 
-  const hostFn = useCallback((name: string, address = 'localhost', code = '') => start('host', name, address, code), [])
-  const joinFn = useCallback((name: string, address: string, code = '') => start('guest', name, address, code), [])
+  const hostFn = useCallback((name: string, address = 'localhost', code = '', pid = '') => start('host', name, address, code, pid), [])
+  const joinFn = useCallback((name: string, address: string, code = '', pid = '') => start('guest', name, address, code, pid), [])
 
   const createSessionFn = useCallback((config: PuzzleConfig, pieces: NetPiece[], groups: Groups) => {
     hostConfigRef.current = config

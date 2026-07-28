@@ -1,9 +1,11 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { StatsFile, ProfileStats, SessionRecord, CompletionRecord, PuzzleMode, StatsHooks } from './types'
 import {
-  loadStatsFile, saveStatsFile, ensureProfile, renameActiveProfile, switchActiveProfile,
+  loadStatsFile, saveStatsFile,
+  createPlayer as createPlayerInFile, selectProfile as selectProfileInFile,
   renameProfile as renameProfileInFile, deleteProfile as deleteProfileInFile,
-  exportStatsFile, importStatsFile,
+  setProfileFriend, upsertCoPlayerCompletion,
+  exportStatsFile, importStatsFile, STORAGE_KEY,
 } from './storage'
 
 function newId(): string {
@@ -11,14 +13,26 @@ function newId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
+export interface ProfileSummary {
+  id: string
+  name: string
+  friend: boolean
+  sessions: number
+  completions: number
+  createdAt: number | null
+}
+
 export interface StatsApi extends StatsHooks {
+  profileId: string
   profileName: string
   profile: ProfileStats
-  profiles: { name: string; sessions: number; completions: number; createdAt: number | null }[]
+  profiles: ProfileSummary[]
   setProfileName(name: string): void
-  selectProfile(name: string): void
-  renameProfile(oldName: string, newName: string): void
-  deleteProfile(name: string): void
+  selectProfile(id: string): void
+  createPlayer(name: string): void
+  renameProfile(id: string, name: string): void
+  deleteProfile(id: string): void
+  setFriend(id: string, friend: boolean): void
   exportFile(): void
   importFile(file: File): Promise<void>
 }
@@ -28,39 +42,66 @@ export function useStats(): StatsApi {
   const fileRef = useRef(file)
   fileRef.current = file
 
+  // Another tab on the same site (a second player joining on this computer)
+  // may add or change profiles. Pick those up live, keeping this tab's own
+  // active player if it still exists.
+  useEffect(() => {
+    function onStorage(e: StorageEvent) {
+      if (e.key !== null && e.key !== STORAGE_KEY) return
+      const reloaded = loadStatsFile()
+      const keep = fileRef.current.activeProfileId
+      const activeProfileId = reloaded.profiles[keep] && !reloaded.profiles[keep].friend
+        ? keep : reloaded.activeProfileId
+      const next = { ...reloaded, activeProfileId }
+      fileRef.current = next
+      setFile(next)
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
+
+  // Persist the loaded (and possibly migrated) file once, so localStorage is
+  // always in the current id-keyed format for other readers.
+  useEffect(() => { saveStatsFile(fileRef.current) }, [])
+
   const persist = useCallback((next: StatsFile) => {
     fileRef.current = next
     setFile(next)
     saveStatsFile(next)
   }, [])
 
-  // Every mutation goes through here so there is exactly one place that
-  // keeps the file -> profiles -> profile nesting immutable.
+  // Every mutation of the active profile goes through here, keyed by its id.
   const updateProfile = useCallback((mutate: (p: ProfileStats) => ProfileStats) => {
     const current = fileRef.current
-    const name = current.activeProfile
-    const existing = current.profiles[name] ?? ensureProfile(current, name)
-    const updated = mutate(existing)
-    persist({ ...current, profiles: { ...current.profiles, [name]: updated } })
+    const id = current.activeProfileId
+    const existing = current.profiles[id]
+    if (!existing) return
+    persist({ ...current, profiles: { ...current.profiles, [id]: mutate(existing) } })
   }, [persist])
 
-  // Renaming keeps your stats: the current profile is renamed in place rather
-  // than switching to a new, empty one.
   const setProfileName = useCallback((name: string) => {
-    persist(renameActiveProfile({ ...fileRef.current, profiles: { ...fileRef.current.profiles } }, name))
+    const id = fileRef.current.activeProfileId
+    persist(renameProfileInFile(fileRef.current, id, name))
   }, [persist])
 
-  // Switch to a different player (creating a fresh one if the name is new).
-  const selectProfile = useCallback((name: string) => {
-    persist(switchActiveProfile({ ...fileRef.current, profiles: { ...fileRef.current.profiles } }, name))
+  const selectProfile = useCallback((id: string) => {
+    persist(selectProfileInFile(fileRef.current, id))
   }, [persist])
 
-  const renameProfile = useCallback((oldName: string, newName: string) => {
-    persist(renameProfileInFile(fileRef.current, oldName, newName))
+  const createPlayer = useCallback((name: string) => {
+    persist(createPlayerInFile(fileRef.current, name))
   }, [persist])
 
-  const deleteProfile = useCallback((name: string) => {
-    persist(deleteProfileInFile(fileRef.current, name))
+  const renameProfile = useCallback((id: string, name: string) => {
+    persist(renameProfileInFile(fileRef.current, id, name))
+  }, [persist])
+
+  const deleteProfile = useCallback((id: string) => {
+    persist(deleteProfileInFile(fileRef.current, id))
+  }, [persist])
+
+  const setFriend = useCallback((id: string, friend: boolean) => {
+    persist(setProfileFriend(fileRef.current, id, friend))
   }, [persist])
 
   const startSession = useCallback((pieceCount: number, cols: number, rows: number, mode: PuzzleMode): string => {
@@ -96,30 +137,51 @@ export function useStats(): StatsApi {
     }))
   }, [updateProfile])
 
-  const completeSession = useCallback((sessionId: string, chainMergeMax: number, coPlayers: string[]) => {
-    updateProfile(p => {
-      const session = p.sessions.find(s => s.id === sessionId)
-      if (!session || session.completed) return p
-      const endedAt = Date.now()
-      const completion: CompletionRecord = {
-        id: newId(),
-        date: endedAt,
-        pieceCount: session.pieceCount,
-        cols: session.cols,
-        rows: session.rows,
-        timeMs: endedAt - session.startedAt,
-        mode: session.mode,
-        piecesPlacedBySelf: session.piecesPlaced,
-        chainMergeMax,
-        coPlayers,
-      }
-      return {
-        ...p,
-        sessions: p.sessions.map(s => s.id === sessionId ? { ...s, endedAt, completed: true } : s),
-        completions: [...p.completions, completion],
-      }
-    })
-  }, [updateProfile])
+  // On completing a shared puzzle, record it for the active player and, by id,
+  // against every co-player too (creating a friend entry if new), so the same
+  // game shows up on each participant's machine.
+  const completeSession = useCallback((sessionId: string, chainMergeMax: number, coPlayers: { id: string; name: string }[]) => {
+    const current = fileRef.current
+    const activeId = current.activeProfileId
+    const active = current.profiles[activeId]
+    if (!active) return
+    const session = active.sessions.find(s => s.id === sessionId)
+    if (!session || session.completed) return
+    const endedAt = Date.now()
+    const completion: CompletionRecord = {
+      id: newId(),
+      date: endedAt,
+      pieceCount: session.pieceCount,
+      cols: session.cols,
+      rows: session.rows,
+      timeMs: endedAt - session.startedAt,
+      mode: session.mode,
+      piecesPlacedBySelf: session.piecesPlaced,
+      chainMergeMax,
+      coPlayers: coPlayers.map(c => c.name),
+    }
+
+    let next: StatsFile = {
+      ...current,
+      profiles: {
+        ...current.profiles,
+        [activeId]: {
+          ...active,
+          sessions: active.sessions.map(s => s.id === sessionId ? { ...s, endedAt, completed: true } : s),
+          completions: [...active.completions, completion],
+        },
+      },
+    }
+
+    for (const cp of coPlayers) {
+      if (!cp.id || cp.id === activeId) continue
+      const theirCoPlayers = [active.name, ...coPlayers.filter(o => o.id !== cp.id).map(o => o.name)]
+      const friendCompletion: CompletionRecord = { ...completion, id: newId(), piecesPlacedBySelf: 0, coPlayers: theirCoPlayers }
+      next = upsertCoPlayerCompletion(next, cp, friendCompletion)
+    }
+
+    persist(next)
+  }, [persist])
 
   const abandonSession = useCallback((sessionId: string) => {
     updateProfile(p => {
@@ -141,23 +203,25 @@ export function useStats(): StatsApi {
     persist(imported)
   }, [persist])
 
-  const profileName = file.activeProfile
-  const profile = file.profiles[profileName] ?? ensureProfile(file, profileName)
-  const profiles = Object.values(file.profiles).map(p => {
-    // Older profiles predate createdAt; fall back to their earliest activity.
+  const profileId = file.activeProfileId
+  const profile = file.profiles[profileId]
+  const profiles: ProfileSummary[] = Object.values(file.profiles).map(p => {
     const times = [...p.sessions.map(s => s.startedAt), ...p.completions.map(c => c.date)]
     const createdAt = p.createdAt ?? (times.length ? Math.min(...times) : null)
-    return { name: p.name, sessions: p.sessions.length, completions: p.completions.length, createdAt }
+    return { id: p.id, name: p.name, friend: p.friend, sessions: p.sessions.length, completions: p.completions.length, createdAt }
   })
 
   return {
-    profileName,
+    profileId,
+    profileName: profile.name,
     profile,
     profiles,
     setProfileName,
     selectProfile,
+    createPlayer,
     renameProfile,
     deleteProfile,
+    setFriend,
     startSession,
     onPiecesPlaced,
     onPickupNotPlaced,

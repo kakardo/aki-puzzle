@@ -976,3 +976,52 @@ kbd {
   box-shadow: 0 1px 4px rgba(0,0,0,0.35);
 }
 
+.join-profiles {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  margin-top: 0.9rem;
+  padding-top: 0.8rem;
+  border-top: 1px solid var(--border);
+}
+
+.join-profiles-label {
+  font-size: 0.8rem;
+  color: var(--subtle);
+  margin-bottom: 0.1rem;
+}
+
+.join-profile-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.4rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: background 0.1s;
+}
+
+.join-profile-row:hover {
+  background: var(--hover);
+}
+
+.join-profile-row--active {
+  border-color: var(--text);
+}
+
+.join-profile-count {
+  color: var(--subtle);
+  font-size: 0.78rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.join-profile-new {
+  justify-content: center;
+  color: var(--subtle);
+}
+
